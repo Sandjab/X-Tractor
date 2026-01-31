@@ -2,6 +2,14 @@
 
 Extraction des articles du réseau social X (ex Twitter) en fichiers HTML autonomes, consultables hors-ligne, avec images embarquées en base64.
 
+## Pourquoi ce projet ?
+
+Depuis mars 2024, X (ex-Twitter) propose une fonctionnalité "Articles" permettant aux abonnés Premium de publier du contenu long (jusqu'à 100 000 caractères) avec formatage riche et médias intégrés.
+
+**Le problème** : X exige désormais une connexion pour accéder à la quasi-totalité de son contenu. Les personnes sans compte se heurtent à un "login wall" et ne peuvent pas lire les Articles qu'on leur partage.
+
+**La solution** : X-Tractor extrait un Article X vers un fichier HTML autonome, consultable par n'importe qui, n'importe où, sans compte X requis.
+
 ## Fonctionnalités
 
 - Extraction complète d'un article X vers un fichier HTML unique

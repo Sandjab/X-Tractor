@@ -3,40 +3,65 @@
 import { chromium } from 'playwright';
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
-const X_USERNAME = process.env.X_USERNAME;
-const X_PASSWORD = process.env.X_PASSWORD;
+// Fichier pour stocker les cookies de session
+const COOKIES_FILE = path.join(os.homedir(), '.x-tractor-cookies.json');
 
 async function main() {
-  const articleUrl = process.argv[2];
-  
-  if (!articleUrl) {
-    console.error('Usage: node index.js <article-url>');
-    console.error('Example: node index.js https://x.com/user/status/123456789');
+  // Parse arguments
+  const args = process.argv.slice(2);
+  const headlessMode = args.includes('--headless');
+  const loginMode = args.includes('--login');
+  const articleUrl = args.find(arg => !arg.startsWith('--'));
+
+  if (!articleUrl && !loginMode) {
+    console.error('Usage: node index.js <article-url> [--headless]');
+    console.error('       node index.js --login');
+    console.error('');
+    console.error('Options:');
+    console.error('  --login     Se connecter à X et sauvegarder la session');
+    console.error('  --headless  Mode sans interface (pour MCP/automatisation)');
+    console.error('              Nécessite une session valide (--login d\'abord)');
+    console.error('');
+    console.error('Workflow MCP:');
+    console.error('  1. node index.js --login              # Une fois, établir la session');
+    console.error('  2. node index.js <url> --headless     # Extractions automatiques');
+    console.error('');
+    console.error('Exemples:');
+    console.error('  node index.js --login');
+    console.error('  node index.js https://x.com/user/status/123 --headless');
     process.exit(1);
   }
 
-  if (!X_USERNAME || !X_PASSWORD) {
-    console.error('Error: X_USERNAME and X_PASSWORD environment variables are required');
-    process.exit(1);
+  // Mode login uniquement
+  if (loginMode) {
+    await doLogin();
+    return;
   }
 
-  console.log('Launching browser...');
-  const browser = await chromium.launch({ headless: true });
+  if (headlessMode) {
+    console.log('Mode headless (MCP)...');
+  } else {
+    console.log('Lancement du navigateur...');
+  }
+
+  // Lancer un navigateur Playwright
+  const browser = await chromium.launch({
+    headless: headlessMode,
+    channel: 'chrome'
+  });
+
   const context = await browser.newContext({
     viewport: { width: 1400, height: 900 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    locale: 'fr-FR'
   });
+
   const page = await context.newPage();
 
   try {
-    // Login to X
-    console.log('Logging in to X...');
-    await login(page);
-    
-    // Navigate to article
-    console.log(`Navigating to article: ${articleUrl}`);
-    await page.goto(articleUrl, { waitUntil: 'networkidle' });
+    // Charger les cookies et naviguer vers l'article (login manuel si nécessaire)
+    await loadOrLogin(context, page, articleUrl, headlessMode);
     
     // Wait for article content to load
     console.log('Waiting for article content...');
@@ -69,37 +94,120 @@ async function main() {
   }
 }
 
-async function login(page) {
-  await page.goto('https://x.com/i/flow/login', { waitUntil: 'networkidle' });
-  
-  // Enter username
-  const usernameInput = page.locator('input[autocomplete="username"]');
-  await usernameInput.fill(X_USERNAME);
-  await page.locator('text=Next').click();
-  
-  // Wait for password field (or sometimes X asks for email/phone verification)
-  await page.waitForTimeout(1500);
-  
-  // Check if there's an additional verification step (username/phone)
-  const verificationInput = page.locator('input[data-testid="ocfEnterTextTextInput"]');
-  if (await verificationInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    console.log('Additional verification required - entering username...');
-    await verificationInput.fill(X_USERNAME);
-    await page.locator('text=Next').click();
-    await page.waitForTimeout(1500);
+async function doLogin() {
+  console.log('Lancement du navigateur pour connexion...');
+
+  const browser = await chromium.launch({
+    headless: false,
+    channel: 'chrome'
+  });
+
+  const context = await browser.newContext({
+    viewport: { width: 1400, height: 900 },
+    locale: 'fr-FR'
+  });
+
+  const page = await context.newPage();
+
+  try {
+    console.log('');
+    console.log('╔══════════════════════════════════════════════════════════════╗');
+    console.log('║  Connectez-vous à X dans le navigateur qui vient de s\'ouvrir ║');
+    console.log('║  Le script se terminera automatiquement après la connexion   ║');
+    console.log('║  (Timeout: 5 minutes)                                        ║');
+    console.log('╚══════════════════════════════════════════════════════════════╝');
+    console.log('');
+
+    await page.goto('https://x.com/login', { waitUntil: 'domcontentloaded' });
+
+    // Attendre que l'utilisateur se connecte
+    await page.waitForURL(
+      url => !url.toString().includes('/login') &&
+             !url.toString().includes('/i/flow/login') &&
+             !url.toString().includes('/i/flow/signup'),
+      { timeout: 300000 }
+    );
+
+    await page.waitForTimeout(2000);
+
+    // Sauvegarder les cookies
+    const cookies = await context.cookies();
+    await fs.writeFile(COOKIES_FILE, JSON.stringify(cookies, null, 2));
+    console.log('');
+    console.log(`✓ Session sauvegardée dans ${COOKIES_FILE}`);
+    console.log('✓ Vous pouvez maintenant utiliser --headless pour les extractions');
+
+  } finally {
+    await browser.close();
   }
-  
-  // Enter password
-  const passwordInput = page.locator('input[type="password"]');
-  await passwordInput.fill(X_PASSWORD);
-  await page.locator('text=Log in').click();
-  
-  // Wait for login to complete
-  await page.waitForURL(url => !url.toString().includes('/login'), { timeout: 30000 });
-  console.log('✓ Logged in successfully');
-  
-  // Small delay to ensure session is fully established
+}
+
+async function loadOrLogin(context, page, articleUrl, headlessMode = false) {
+  // Essayer de charger les cookies existants
+  let hasCookies = false;
+  try {
+    const cookiesData = await fs.readFile(COOKIES_FILE, 'utf-8');
+    const cookies = JSON.parse(cookiesData);
+    await context.addCookies(cookies);
+    console.log('✓ Cookies chargés');
+    hasCookies = true;
+  } catch (err) {
+    if (headlessMode) {
+      throw new Error('SESSION_REQUIRED: Aucune session sauvegardée. Lancez d\'abord le script sans --headless pour vous connecter.');
+    }
+    console.log('Aucune session sauvegardée');
+  }
+
+  // Aller directement sur l'article
+  console.log(`Navigation vers l'article...`);
+  await page.goto(articleUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);
+
+  // Vérifier si on est redirigé vers login
+  const currentUrl = page.url();
+  const needsLogin = currentUrl.includes('/login') ||
+                     currentUrl.includes('/i/flow/login') ||
+                     currentUrl.includes('/i/flow/signup');
+
+  if (!needsLogin) {
+    // Session valide, on continue
+    return;
+  }
+
+  // En mode headless, on ne peut pas demander de login manuel
+  if (headlessMode) {
+    throw new Error('SESSION_EXPIRED: La session a expiré. Lancez le script sans --headless pour vous reconnecter.');
+  }
+
+  // Login manuel nécessaire
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════════════╗');
+  console.log('║  Connectez-vous à X dans le navigateur qui vient de s\'ouvrir ║');
+  console.log('║  Le script continuera automatiquement après la connexion     ║');
+  console.log('║  (Timeout: 5 minutes)                                        ║');
+  console.log('╚══════════════════════════════════════════════════════════════╝');
+  console.log('');
+
+  // Attendre que l'utilisateur se connecte (max 5 minutes)
+  await page.waitForURL(
+    url => !url.toString().includes('/login') &&
+           !url.toString().includes('/i/flow/login') &&
+           !url.toString().includes('/i/flow/signup'),
+    { timeout: 300000 }
+  );
+
+  // Petite pause pour s'assurer que la session est établie
+  await page.waitForTimeout(2000);
+
+  // Si on n'est pas sur l'article, y aller
+  if (!page.url().includes(articleUrl.split('/status/')[1])) {
+    await page.goto(articleUrl, { waitUntil: 'domcontentloaded' });
+  }
+
+  // Sauvegarder les cookies
+  const cookies = await context.cookies();
+  await fs.writeFile(COOKIES_FILE, JSON.stringify(cookies, null, 2));
+  console.log(`✓ Cookies sauvegardés`);
 }
 
 async function waitForArticleContent(page) {
@@ -183,32 +291,43 @@ async function extractArticle(page) {
 
 async function embedImages(page, articleData) {
   const { html, styles, bodyStyles } = articleData;
-  
-  // Find all image URLs in the HTML
+
+  // Find all image URLs in HTML and CSS
   const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
-  const backgroundRegex = /url\(["']?([^"')]+)["']?\)/g;
-  
+  const backgroundRegex = /url\(["']?(https?:\/\/[^"')]+)["']?\)/g;
+
   let processedHtml = html;
+  let processedStyles = styles;
   const imageUrls = new Set();
-  
-  // Collect image URLs from img tags
+
+  // Collect image URLs from img tags in HTML
   let match;
   while ((match = imgRegex.exec(html)) !== null) {
-    imageUrls.add(match[1]);
-  }
-  
-  // Collect image URLs from background styles
-  while ((match = backgroundRegex.exec(html)) !== null) {
     if (match[1].startsWith('http')) {
       imageUrls.add(match[1]);
     }
   }
-  
+
+  // Collect image URLs from background-image in HTML
+  while ((match = backgroundRegex.exec(html)) !== null) {
+    imageUrls.add(match[1]);
+  }
+
+  // Collect image URLs from background-image in CSS styles
+  const backgroundRegex2 = /url\(["']?(https?:\/\/[^"')]+)["']?\)/g;
+  while ((match = backgroundRegex2.exec(styles)) !== null) {
+    imageUrls.add(match[1]);
+  }
+
+  console.log(`Found ${imageUrls.size} images to convert...`);
+
   // Convert each image to base64
+  let converted = 0;
   for (const url of imageUrls) {
     try {
       const base64 = await page.evaluate(async (imageUrl) => {
-        const response = await fetch(imageUrl);
+        const response = await fetch(imageUrl, { credentials: 'include' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -217,15 +336,19 @@ async function embedImages(page, articleData) {
           reader.readAsDataURL(blob);
         });
       }, url);
-      
-      // Replace URL with base64 in HTML
+
+      // Replace URL with base64 in both HTML and CSS
       processedHtml = processedHtml.split(url).join(base64);
+      processedStyles = processedStyles.split(url).join(base64);
+      converted++;
     } catch (error) {
-      console.warn(`Warning: Could not convert image ${url}: ${error.message}`);
+      console.warn(`⚠ Could not convert: ${url.substring(0, 60)}... (${error.message})`);
     }
   }
-  
-  return { html: processedHtml, styles, bodyStyles };
+
+  console.log(`✓ Converted ${converted}/${imageUrls.size} images`);
+
+  return { html: processedHtml, styles: processedStyles, bodyStyles };
 }
 
 function generateStandaloneHtml(articleData) {
@@ -252,11 +375,11 @@ function generateStandaloneHtml(articleData) {
       line-height: 1.5;
     }
     
-    /* Container for wider display */
+    /* Container full width */
     .article-container {
-      max-width: 800px;
+      max-width: 100%;
       margin: 0 auto;
-      padding: 20px;
+      padding: 20px 40px;
     }
     
     /* Responsive images */
@@ -270,8 +393,16 @@ function generateStandaloneHtml(articleData) {
     
     /* Override X's narrow width constraints */
     [style*="max-width: 600px"],
-    [style*="max-width:600px"] {
+    [style*="max-width:600px"],
+    [style*="max-width: 598px"],
+    [style*="max-width:598px"] {
       max-width: 100% !important;
+    }
+
+    /* Force all content to expand */
+    article, article > div {
+      max-width: 100% !important;
+      width: 100% !important;
     }
   </style>
 </head>

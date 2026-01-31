@@ -6,35 +6,88 @@ Extrait les articles X (Twitter) vers des fichiers HTML autonomes, avec images e
 
 ```bash
 npm install
+npx playwright install chromium
 ```
 
-## Configuration
+## Modes d'utilisation
 
-Définir les variables d'environnement :
+### 1. CLI interactif (recommandé pour démarrer)
 
 ```bash
-export X_USERNAME="votre_email_ou_username"
-export X_PASSWORD="votre_mot_de_passe"
+# Première utilisation : se connecter à X
+node index.js --login
+
+# Extraire un article (ouvre un navigateur)
+node index.js https://x.com/user/status/123456789
 ```
 
-Ou copier `.env.example` vers `.env` et utiliser un outil comme `dotenv`.
-
-## Utilisation
+### 2. CLI headless (automatisation)
 
 ```bash
-node index.js <url-de-larticle>
+# Nécessite une session valide (--login d'abord)
+node index.js https://x.com/user/status/123456789 --headless
 ```
 
-Exemple :
+### 3. Serveur MCP (pour Claude Code / LLMs)
 
 ```bash
-node index.js https://x.com/elonmusk/status/1234567890
+# Démarrer le serveur MCP
+node mcp-server.js
 ```
 
-Le fichier HTML sera généré dans le répertoire courant avec un nom du type `x-article-1234567890.html`.
+## Configuration MCP pour Claude Code
+
+```bash
+claude mcp add x-article-extractor node /chemin/vers/x-article-extractor/mcp-server.js
+```
+
+Optionnel - avec répertoire de sortie personnalisé :
+```bash
+claude mcp add x-article-extractor -e X_TRACTOR_OUTPUT_DIR=/chemin/sortie -- node /chemin/vers/mcp-server.js
+```
+
+### Outils MCP disponibles
+
+| Outil | Description |
+|-------|-------------|
+| `check_x_session` | Vérifie si une session X valide existe |
+| `extract_x_article` | Extrait un article vers HTML (nécessite session valide) |
+
+### Workflow MCP
+
+1. **Setup initial** (une seule fois, dans votre terminal) :
+   ```bash
+   cd /chemin/vers/x-article-extractor
+   node index.js --login
+   ```
+   → Se connecter dans le navigateur qui s'ouvre
+   → Les cookies sont sauvegardés dans `~/.x-tractor-cookies.json`
+
+2. **Utilisation via Claude Code** :
+   - Claude peut appeler `check_x_session` pour vérifier l'état
+   - Claude peut appeler `extract_x_article` avec une URL
+
+## Options CLI
+
+| Option | Description |
+|--------|-------------|
+| `--login` | Ouvre un navigateur pour se connecter à X et sauvegarder la session |
+| `--headless` | Mode sans interface graphique (nécessite session valide) |
+
+## Variables d'environnement
+
+| Variable | Description | Défaut |
+|----------|-------------|--------|
+| `X_TRACTOR_OUTPUT_DIR` | Répertoire de sortie pour les fichiers HTML | Répertoire courant |
+
+## Fichiers générés
+
+- `~/.x-tractor-cookies.json` : Cookies de session X
+- `x-article-TIMESTAMP.html` : Article extrait
 
 ## Notes
 
-- Pas de support 2FA pour l'instant
-- Le rendu reproduit le style de X mais avec une largeur de contenu plus généreuse (800px au lieu de 600px)
-- Toutes les images sont embarquées en base64, le fichier HTML est totalement autonome
+- Le rendu reproduit le style de X en pleine largeur
+- Toutes les images sont embarquées en base64 (fichier autonome)
+- Pas de support 2FA
+- La session expire après quelques semaines, relancer `--login` si nécessaire

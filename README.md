@@ -14,23 +14,25 @@ Depuis mars 2024, X (ex-Twitter) propose une fonctionnalité "Articles" permetta
 
 - Extraction complète d'un article X vers un fichier HTML unique
 - Images converties en base64 (fichier totalement autonome, partageable sans assets)
-- Rendu fidèle au style de X avec largeur de contenu élargie (800px au lieu de 600px)
+- Rendu fidèle au style de X en pleine largeur
 - Support du mode sombre et clair (thème capturé au moment de l'extraction)
 - Suppression automatique des boutons d'interaction (like, retweet, reply, etc.)
+- **Serveur MCP** pour intégration avec Claude Code et autres LLMs
 
 ## Les 3 outils
 
 Le projet propose trois approches pour extraire les articles, chacune avec ses avantages :
 
-| Outil | Auth | Images CORS | Automatisable | Poids |
-|-------|------|-------------|---------------|-------|
-| **CLI Playwright** | Variables d'environnement | Aucun problème | Oui | ~300 Mo |
-| **Bookmarklet** | Session navigateur | Parfois bloquées | Non | ~4 Ko |
-| **Extension Chrome** | Session navigateur | Parfois bloquées | Non | ~10 Ko |
+| Outil | Auth | Images CORS | Automatisable | MCP | Poids |
+|-------|------|-------------|---------------|-----|-------|
+| **CLI Playwright** | Session cookies | Aucun problème | Oui | Oui | ~300 Mo |
+| **Bookmarklet** | Session navigateur | Parfois bloquées | Non | Non | ~4 Ko |
+| **Extension Chrome** | Session navigateur | Parfois bloquées | Non | Non | ~10 Ko |
 
 ### Quand utiliser quoi ?
 
-- **CLI Playwright** : Automatisation, extraction en masse, ou quand les images posent problème
+- **CLI Playwright + MCP** : Automatisation via Claude Code, extraction en masse
+- **CLI Playwright** : Extraction en ligne de commande
 - **Bookmarklet** : Usage occasionnel, installation ultra-rapide (drag & drop)
 - **Extension Chrome** : Usage régulier avec interface graphique
 
@@ -43,15 +45,6 @@ cd x-article-extractor
 npm install
 npx playwright install chromium
 ```
-
-Configuration des credentials :
-
-```bash
-export X_USERNAME="votre_email_ou_username"
-export X_PASSWORD="votre_mot_de_passe"
-```
-
-Ou copier `.env.example` vers `.env`.
 
 ### Bookmarklet
 
@@ -71,10 +64,34 @@ Ou copier `.env.example` vers `.env`.
 ### CLI
 
 ```bash
+# Première utilisation : se connecter à X
+node x-article-extractor/index.js --login
+
+# Extraire un article (mode interactif)
 node x-article-extractor/index.js https://x.com/utilisateur/status/1234567890
+
+# Extraire un article (mode headless/automatique)
+node x-article-extractor/index.js https://x.com/utilisateur/status/1234567890 --headless
 ```
 
 Le fichier `x-article-TIMESTAMP.html` sera généré dans le répertoire courant.
+
+### Serveur MCP (Claude Code)
+
+1. **Setup initial** (une seule fois) :
+   ```bash
+   cd x-article-extractor
+   node index.js --login
+   ```
+
+2. **Configurer Claude Code** :
+   ```bash
+   claude mcp add x-article-extractor node /chemin/vers/x-article-extractor/mcp-server.js
+   ```
+
+3. **Utiliser via Claude** :
+   - "Vérifie ma session X" → appelle `check_x_session`
+   - "Extrait cet article X: https://x.com/..." → appelle `extract_x_article`
 
 ### Bookmarklet
 
@@ -94,10 +111,10 @@ Le fichier `x-article-TIMESTAMP.html` sera généré dans le répertoire courant
 
 ```
 X-Tractor/
-├── x-article-extractor/     # CLI Node.js + Playwright
-│   ├── index.js             # Script principal
-│   ├── package.json
-│   └── .env.example
+├── x-article-extractor/     # CLI Node.js + Playwright + MCP
+│   ├── index.js             # Script CLI principal
+│   ├── mcp-server.js        # Serveur MCP pour Claude Code
+│   └── package.json
 ├── x-bookmarklet/           # Bookmarklet JavaScript
 │   ├── bookmarklet.js       # Code source
 │   ├── bookmarklet.min.js   # Version minifiée
@@ -114,6 +131,7 @@ X-Tractor/
 - **CORS sur les images** : Le bookmarklet et l'extension peuvent échouer à convertir certaines images en base64 (elles restent alors avec leur URL originale)
 - **Pas de threads** : L'extraction de threads multi-tweets n'est pas supportée
 - **SPA React** : Les sélecteurs DOM de X peuvent changer sans préavis
+- **Session expirante** : Les cookies X expirent après quelques semaines, relancer `--login`
 
 ## Licence
 

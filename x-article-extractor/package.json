@@ -1,0 +1,16 @@
+{
+  "name": "x-article-extractor",
+  "version": "1.0.0",
+  "description": "Extract X articles to standalone HTML files",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "x-extract": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0"
+  }
+}

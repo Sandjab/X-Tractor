@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #15202b;
+      color: #e7e9ea;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 16px;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h1 span { font-size: 20px; }
+    .status {
+      background: #192734;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 15px;
+      font-size: 13px;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+    }
+    .status.error { background: #3d1f1f; color: #f4212e; }
+    .status.success { background: #1f3d2a; color: #00ba7c; }
+    button {
+      width: 100%;
+      background: #1d9bf0;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 30px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #1a8cd8; }
+    button:disabled {
+      background: #38444d;
+      cursor: not-allowed;
+    }
+    .progress {
+      margin-top: 10px;
+      height: 4px;
+      background: #38444d;
+      border-radius: 2px;
+      overflow: hidden;
+      display: none;
+    }
+    .progress.active { display: block; }
+    .progress-bar {
+      height: 100%;
+      background: #1d9bf0;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .info {
+      margin-top: 15px;
+      font-size: 11px;
+      color: #8b98a5;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1><span>📰</span> X Article Extractor</h1>
+  <div id="status" class="status">Prêt à extraire</div>
+  <div id="progress" class="progress">
+    <div id="progress-bar" class="progress-bar"></div>
+  </div>
+  <button id="extract-btn">Extraire l'article</button>
+  <div class="info">Les images seront embarquées en base64</div>
+  <script src="popup.js"></script>
+</body>
+</html>

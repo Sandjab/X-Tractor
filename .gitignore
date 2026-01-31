@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment variables (credentials)
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Generated files
+error-screenshot.png
+x-article-*.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Playwright
+playwright-report/
+test-results/

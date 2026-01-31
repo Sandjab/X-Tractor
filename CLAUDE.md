@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Transformer un article X (Twitter) en fichier HTML autonome, consultable hors-ligne, avec images embarquées en base64. Le rendu doit être fidèle à X mais avec une largeur de contenu plus généreuse (800px au lieu de 600px).
+Transformer un article X (Twitter) en fichier HTML autonome, consultable hors-ligne, avec images embarquées en base64. Le rendu doit être fidèle à X mais avec une largeur de contenu en pleine largeur (100%) pour une meilleure lisibilité sur grand écran.
 
 ## Structure du projet
 
@@ -66,8 +66,8 @@ Auto-wait intelligent. X charge le contenu progressivement, Playwright gère mie
 ### Pourquoi base64 plutôt que fichiers séparés ?
 Fichier unique = partage simplifié. Un seul .html à envoyer, pas de dossier d'assets.
 
-### Pourquoi 800px de largeur ?
-Compromis entre lisibilité (X utilise 600px, trop étroit sur grand écran) et préservation du design original.
+### Pourquoi 100% de largeur ?
+X utilise 600px, trop étroit sur grand écran. La pleine largeur (100%) avec un padding de 40px offre une meilleure lisibilité tout en préservant le design original.
 
 ## Commandes utiles
 

@@ -101,14 +101,21 @@
       font-family: ${fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'};
       line-height: 1.5;
     }
+    /* Container full width */
     .article-container {
-      max-width: 800px;
+      max-width: 100%;
       margin: 0 auto;
-      padding: 20px;
+      padding: 20px 40px;
     }
+    /* Responsive images */
     img { max-width: 100%; height: auto; }
+    /* Original X styles */
     ${styles}
-    [style*="max-width: 600px"], [style*="max-width:600px"] { max-width: 100% !important; }
+    /* Override X's narrow width constraints */
+    [style*="max-width: 600px"], [style*="max-width:600px"],
+    [style*="max-width: 598px"], [style*="max-width:598px"] { max-width: 100% !important; }
+    /* Force all content to expand */
+    article, article > div { max-width: 100% !important; width: 100% !important; }
   </style>
 </head>
 <body>

@@ -49,6 +49,36 @@
       margin: 20px 0;
       border-radius: 0 8px 8px 0;
     }
+    .copy-btn {
+      display: inline-block;
+      background: #1d9bf0;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 30px;
+      border: none;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    .copy-btn:hover { background: #1a8cd8; }
+    .copy-btn.copied { background: #00ba7c; }
+    .tab-container { margin: 20px 0; }
+    .tab-buttons { display: flex; gap: 0; }
+    .tab-btn {
+      background: #2f3336;
+      color: #8b98a5;
+      border: none;
+      padding: 12px 24px;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .tab-btn:first-child { border-radius: 8px 0 0 0; }
+    .tab-btn:last-child { border-radius: 0 8px 0 0; }
+    .tab-btn.active { background: #16181c; color: #e7e9ea; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
   </style>
 </head>
 <body>
@@ -56,24 +86,59 @@
   <p>Extrait n'importe quel article X vers un fichier HTML autonome, avec images embarquées.</p>
 
   <h2>Installation</h2>
-  <p>Glissez ce bouton dans votre barre de favoris :</p>
-  
-  <a class="bookmarklet-link" href="javascript:(async%20function()%20%7B%20const%20statusDiv%20%3D%20document.createElement('div')%3B%20statusDiv.id%20%3D%20'x-extractor-status'%3B%20statusDiv.style.cssText%20%3D%20'position%3Afixed%3Btop%3A20px%3Bright%3A20px%3Bbackground%3A%231d9bf0%3Bcolor%3Awhite%3Bpadding%3A15px%2020px%3Bborder-radius%3A8px%3Bz-index%3A999999%3Bfont-family%3Asystem-ui%3Bfont-size%3A14px%3Bbox-shadow%3A0%204px%2012px%20rgba(0%2C0%2C0%2C0.3)%3B'%3B%20statusDiv.textContent%20%3D%20'Extraction%20en%20cours...'%3B%20document.body.appendChild(statusDiv)%3B%20const%20updateStatus%20%3D%20(msg)%20%3D%3E%20%7B%20statusDiv.textContent%20%3D%20msg%3B%20%7D%3B%20const%20sleep%20%3D%20(ms)%20%3D%3E%20new%20Promise(r%20%3D%3E%20setTimeout(r%2C%20ms))%3B%20try%20%7B%20updateStatus('Recherche%20de%20l%5C'article...')%3B%20const%20article%20%3D%20document.querySelector('article')%3B%20if%20(!article)%20throw%20new%20Error('Article%20non%20trouv%C3%A9%20sur%20cette%20page')%3B%20const%20articleContainer%20%3D%20article.closest('%5Bdata-testid%3D%22tweet%22%5D')%20%7C%7C%20article%3B%20const%20clone%20%3D%20articleContainer.cloneNode(true)%3B%20%5B'%5Bdata-testid%3D%22reply%22%5D'%2C%20'%5Bdata-testid%3D%22retweet%22%5D'%2C%20'%5Bdata-testid%3D%22like%22%5D'%2C%20'%5Bdata-testid%3D%22bookmark%22%5D'%2C%20'%5Bdata-testid%3D%22share%22%5D'%2C%20'%5Brole%3D%22group%22%5D'%5D.forEach(sel%20%3D%3E%20%7B%20clone.querySelectorAll(sel).forEach(el%20%3D%3E%20el.remove())%3B%20%7D)%3B%20updateStatus('Extraction%20des%20styles...')%3B%20let%20styles%20%3D%20''%3B%20for%20(const%20sheet%20of%20document.styleSheets)%20%7B%20try%20%7B%20for%20(const%20rule%20of%20sheet.cssRules%20%7C%7C%20%5B%5D)%20%7B%20styles%20%2B%3D%20rule.cssText%20%2B%20'%5Cn'%3B%20%7D%20%7D%20catch%20(e)%20%7B%7D%20%7D%20const%20bodyStyle%20%3D%20getComputedStyle(document.body)%3B%20const%20bgColor%20%3D%20bodyStyle.backgroundColor%20%7C%7C%20'%23000'%3B%20const%20textColor%20%3D%20bodyStyle.color%20%7C%7C%20'%23fff'%3B%20const%20fontFamily%20%3D%20bodyStyle.fontFamily%3B%20updateStatus('Conversion%20des%20images...')%3B%20const%20images%20%3D%20clone.querySelectorAll('img')%3B%20let%20processed%20%3D%200%3B%20for%20(const%20img%20of%20images)%20%7B%20try%20%7B%20const%20response%20%3D%20await%20fetch(img.src)%3B%20const%20blob%20%3D%20await%20response.blob()%3B%20const%20base64%20%3D%20await%20new%20Promise((resolve%2C%20reject)%20%3D%3E%20%7B%20const%20reader%20%3D%20new%20FileReader()%3B%20reader.onloadend%20%3D%20()%20%3D%3E%20resolve(reader.result)%3B%20reader.onerror%20%3D%20reject%3B%20reader.readAsDataURL(blob)%3B%20%7D)%3B%20img.src%20%3D%20base64%3B%20processed%2B%2B%3B%20updateStatus(%60Conversion%20des%20images...%20%24%7Bprocessed%7D%2F%24%7Bimages.length%7D%60)%3B%20%7D%20catch%20(e)%20%7B%20console.warn('Image%20non%20convertie%3A'%2C%20img.src)%3B%20%7D%20%7D%20const%20elementsWithBg%20%3D%20clone.querySelectorAll('*')%3B%20for%20(const%20el%20of%20elementsWithBg)%20%7B%20const%20bg%20%3D%20el.style.backgroundImage%3B%20if%20(bg%20%26%26%20bg.startsWith('url('))%20%7B%20const%20urlMatch%20%3D%20bg.match(%2Furl%5C(%5B%22'%5D%3F(%5B%5E%22')%5D%2B)%5B%22'%5D%3F%5C)%2F)%3B%20if%20(urlMatch%20%26%26%20urlMatch%5B1%5D.startsWith('http'))%20%7B%20try%20%7B%20const%20response%20%3D%20await%20fetch(urlMatch%5B1%5D)%3B%20const%20blob%20%3D%20await%20response.blob()%3B%20const%20base64%20%3D%20await%20new%20Promise((resolve%2C%20reject)%20%3D%3E%20%7B%20const%20reader%20%3D%20new%20FileReader()%3B%20reader.onloadend%20%3D%20()%20%3D%3E%20resolve(reader.result)%3B%20reader.onerror%20%3D%20reject%3B%20reader.readAsDataURL(blob)%3B%20%7D)%3B%20el.style.backgroundImage%20%3D%20%60url(%22%24%7Bbase64%7D%22)%60%3B%20%7D%20catch%20(e)%20%7B%7D%20%7D%20%7D%20%7D%20updateStatus('G%C3%A9n%C3%A9ration%20du%20HTML...')%3B%20const%20html%20%3D%20%60%3C!DOCTYPE%20html%3E%3Chtml%20lang%3D%22en%22%3E%3Chead%3E%3Cmeta%20charset%3D%22UTF-8%22%3E%3Cmeta%20name%3D%22viewport%22%20content%3D%22width%3Ddevice-width%2C%20initial-scale%3D1.0%22%3E%3Ctitle%3EX%20Article%20-%20%24%7Bnew%20Date().toLocaleDateString()%7D%3C%2Ftitle%3E%3Cstyle%3E*%20%7B%20box-sizing%3A%20border-box%3B%20%7D%20body%20%7B%20margin%3A%200%3B%20padding%3A%2020px%3B%20background-color%3A%20%24%7BbgColor%7D%3B%20color%3A%20%24%7BtextColor%7D%3B%20font-family%3A%20%24%7BfontFamily%20%7C%7C%20'-apple-system%2C%20BlinkMacSystemFont%2C%20%22Segoe%20UI%22%2C%20Roboto%2C%20Helvetica%2C%20Arial%2C%20sans-serif'%7D%3B%20line-height%3A%201.5%3B%20%7D%20.article-container%20%7B%20max-width%3A%20100%25%3B%20margin%3A%200%20auto%3B%20padding%3A%2020px%2040px%3B%20%7D%20img%20%7B%20max-width%3A%20100%25%3B%20height%3A%20auto%3B%20%7D%20%24%7Bstyles%7D%20%5Bstyle*%3D%22max-width%3A%20600px%22%5D%2C%20%5Bstyle*%3D%22max-width%3A600px%22%5D%2C%20%5Bstyle*%3D%22max-width%3A%20598px%22%5D%2C%20%5Bstyle*%3D%22max-width%3A598px%22%5D%20%7B%20max-width%3A%20100%25%20!important%3B%20%7D%20article%2C%20article%20%3E%20div%20%7B%20max-width%3A%20100%25%20!important%3B%20width%3A%20100%25%20!important%3B%20%7D%3C%2Fstyle%3E%3C%2Fhead%3E%3Cbody%3E%3Cdiv%20class%3D%22article-container%22%3E%24%7Bclone.outerHTML%7D%3C%2Fdiv%3E%3C%2Fbody%3E%3C%2Fhtml%3E%60%3B%20updateStatus('T%C3%A9l%C3%A9chargement...')%3B%20const%20blob%20%3D%20new%20Blob(%5Bhtml%5D%2C%20%7B%20type%3A%20'text%2Fhtml'%20%7D)%3B%20const%20url%20%3D%20URL.createObjectURL(blob)%3B%20const%20a%20%3D%20document.createElement('a')%3B%20a.href%20%3D%20url%3B%20a.download%20%3D%20%60x-article-%24%7BDate.now()%7D.html%60%3B%20document.body.appendChild(a)%3B%20a.click()%3B%20document.body.removeChild(a)%3B%20URL.revokeObjectURL(url)%3B%20updateStatus('%E2%9C%93%20Termin%C3%A9%20!')%3B%20await%20sleep(2000)%3B%20statusDiv.remove()%3B%20%7D%20catch%20(error)%20%7B%20updateStatus('%E2%9D%8C%20Erreur%3A%20'%20%2B%20error.message)%3B%20await%20sleep(4000)%3B%20statusDiv.remove()%3B%20%7D%7D)()%3B">📥 Extraire Article X</a>
 
-  <div class="instructions">
-    <h3>Comment l'utiliser</h3>
-    <ol>
-      <li>Glissez le bouton bleu ci-dessus dans votre barre de favoris</li>
-      <li>Allez sur une page d'article X (vous devez être connecté)</li>
-      <li>Cliquez sur le favori "Extraire Article X"</li>
-      <li>Attendez quelques secondes pendant la conversion des images</li>
-      <li>Le fichier HTML sera automatiquement téléchargé</li>
-    </ol>
+  <div class="tab-container">
+    <div class="tab-buttons">
+      <button class="tab-btn active" onclick="switchTab('desktop')">Ordinateur</button>
+      <button class="tab-btn" onclick="switchTab('iphone')">iPhone / iPad</button>
+    </div>
+
+    <div id="tab-desktop" class="tab-content active instructions">
+      <h3>Installation sur ordinateur</h3>
+      <p>Glissez ce bouton dans votre barre de favoris :</p>
+      <p>
+        <a class="bookmarklet-link" id="bookmarklet-link" href="javascript:(async%20function()%20%7B%20const%20statusDiv%20%3D%20document.createElement('div')%3B%20statusDiv.id%20%3D%20'x-extractor-status'%3B%20statusDiv.style.cssText%20%3D%20'position%3Afixed%3Btop%3A20px%3Bright%3A20px%3Bbackground%3A%231d9bf0%3Bcolor%3Awhite%3Bpadding%3A15px%2020px%3Bborder-radius%3A8px%3Bz-index%3A999999%3Bfont-family%3Asystem-ui%3Bfont-size%3A14px%3Bbox-shadow%3A0%204px%2012px%20rgba(0%2C0%2C0%2C0.3)%3B'%3B%20statusDiv.textContent%20%3D%20'Extraction%20en%20cours...'%3B%20document.body.appendChild(statusDiv)%3B%20const%20updateStatus%20%3D%20(msg)%20%3D%3E%20%7B%20statusDiv.textContent%20%3D%20msg%3B%20%7D%3B%20const%20sleep%20%3D%20(ms)%20%3D%3E%20new%20Promise(r%20%3D%3E%20setTimeout(r%2C%20ms))%3B%20try%20%7B%20updateStatus('Recherche%20de%20l%5C'article...')%3B%20const%20article%20%3D%20document.querySelector('article')%3B%20if%20(!article)%20throw%20new%20Error('Article%20non%20trouv%C3%A9%20sur%20cette%20page')%3B%20const%20articleContainer%20%3D%20article.closest('%5Bdata-testid%3D%22tweet%22%5D')%20%7C%7C%20article%3B%20const%20clone%20%3D%20articleContainer.cloneNode(true)%3B%20%5B'%5Bdata-testid%3D%22reply%22%5D'%2C%20'%5Bdata-testid%3D%22retweet%22%5D'%2C%20'%5Bdata-testid%3D%22like%22%5D'%2C%20'%5Bdata-testid%3D%22bookmark%22%5D'%2C%20'%5Bdata-testid%3D%22share%22%5D'%2C%20'%5Brole%3D%22group%22%5D'%5D.forEach(sel%20%3D%3E%20%7B%20clone.querySelectorAll(sel).forEach(el%20%3D%3E%20el.remove())%3B%20%7D)%3B%20updateStatus('Extraction%20des%20styles...')%3B%20let%20styles%20%3D%20''%3B%20for%20(const%20sheet%20of%20document.styleSheets)%20%7B%20try%20%7B%20for%20(const%20rule%20of%20sheet.cssRules%20%7C%7C%20%5B%5D)%20%7B%20styles%20%2B%3D%20rule.cssText%20%2B%20'%5Cn'%3B%20%7D%20%7D%20catch%20(e)%20%7B%7D%20%7D%20const%20bodyStyle%20%3D%20getComputedStyle(document.body)%3B%20const%20bgColor%20%3D%20bodyStyle.backgroundColor%20%7C%7C%20'%23000'%3B%20const%20textColor%20%3D%20bodyStyle.color%20%7C%7C%20'%23fff'%3B%20const%20fontFamily%20%3D%20bodyStyle.fontFamily%3B%20updateStatus('Conversion%20des%20images...')%3B%20const%20images%20%3D%20clone.querySelectorAll('img')%3B%20let%20processed%20%3D%200%3B%20for%20(const%20img%20of%20images)%20%7B%20try%20%7B%20const%20response%20%3D%20await%20fetch(img.src)%3B%20const%20blob%20%3D%20await%20response.blob()%3B%20const%20base64%20%3D%20await%20new%20Promise((resolve%2C%20reject)%20%3D%3E%20%7B%20const%20reader%20%3D%20new%20FileReader()%3B%20reader.onloadend%20%3D%20()%20%3D%3E%20resolve(reader.result)%3B%20reader.onerror%20%3D%20reject%3B%20reader.readAsDataURL(blob)%3B%20%7D)%3B%20img.src%20%3D%20base64%3B%20processed%2B%2B%3B%20updateStatus(%60Conversion%20des%20images...%20%24%7Bprocessed%7D%2F%24%7Bimages.length%7D%60)%3B%20%7D%20catch%20(e)%20%7B%20console.warn('Image%20non%20convertie%3A'%2C%20img.src)%3B%20%7D%20%7D%20const%20elementsWithBg%20%3D%20clone.querySelectorAll('*')%3B%20for%20(const%20el%20of%20elementsWithBg)%20%7B%20const%20bg%20%3D%20el.style.backgroundImage%3B%20if%20(bg%20%26%26%20bg.startsWith('url('))%20%7B%20const%20urlMatch%20%3D%20bg.match(%2Furl%5C(%5B%22'%5D%3F(%5B%5E%22')%5D%2B)%5B%22'%5D%3F%5C)%2F)%3B%20if%20(urlMatch%20%26%26%20urlMatch%5B1%5D.startsWith('http'))%20%7B%20try%20%7B%20const%20response%20%3D%20await%20fetch(urlMatch%5B1%5D)%3B%20const%20blob%20%3D%20await%20response.blob()%3B%20const%20base64%20%3D%20await%20new%20Promise((resolve%2C%20reject)%20%3D%3E%20%7B%20const%20reader%20%3D%20new%20FileReader()%3B%20reader.onloadend%20%3D%20()%20%3D%3E%20resolve(reader.result)%3B%20reader.onerror%20%3D%20reject%3B%20reader.readAsDataURL(blob)%3B%20%7D)%3B%20el.style.backgroundImage%20%3D%20%60url(%22%24%7Bbase64%7D%22)%60%3B%20%7D%20catch%20(e)%20%7B%7D%20%7D%20%7D%20%7D%20updateStatus('G%C3%A9n%C3%A9ration%20du%20HTML...')%3B%20const%20html%20%3D%20%60%3C!DOCTYPE%20html%3E%20%3Chtml%20lang%3D%22en%22%3E%20%3Chead%3E%20%3Cmeta%20charset%3D%22UTF-8%22%3E%20%3Cmeta%20name%3D%22viewport%22%20content%3D%22width%3Ddevice-width%2C%20initial-scale%3D1.0%22%3E%20%3Ctitle%3EX%20Article%20-%20%24%7Bnew%20Date().toLocaleDateString()%7D%3C%2Ftitle%3E%20%3Cstyle%3E%20*%20%7B%20box-sizing%3A%20border-box%3B%20%7D%20body%20%7B%20margin%3A%200%3B%20padding%3A%2020px%3B%20background-color%3A%20%24%7BbgColor%7D%3B%20color%3A%20%24%7BtextColor%7D%3B%20font-family%3A%20%24%7BfontFamily%20%7C%7C%20'-apple-system%2C%20BlinkMacSystemFont%2C%20%22Segoe%20UI%22%2C%20Roboto%2C%20Helvetica%2C%20Arial%2C%20sans-serif'%7D%3B%20line-height%3A%201.5%3B%20%7D%20.article-container%20%7B%20max-width%3A%20100%25%3B%20margin%3A%200%20auto%3B%20padding%3A%2020px%2040px%3B%20%7D%20img%20%7B%20max-width%3A%20100%25%3B%20height%3A%20auto%3B%20%7D%20%24%7Bstyles%7D%20%5Bstyle*%3D%22max-width%3A%20600px%22%5D%2C%20%5Bstyle*%3D%22max-width%3A600px%22%5D%2C%20%5Bstyle*%3D%22max-width%3A%20598px%22%5D%2C%20%5Bstyle*%3D%22max-width%3A598px%22%5D%20%7B%20max-width%3A%20100%25%20!important%3B%20%7D%20article%2C%20article%20%3E%20div%20%7B%20max-width%3A%20100%25%20!important%3B%20width%3A%20100%25%20!important%3B%20%7D%20%3C%2Fstyle%3E%20%3C%2Fhead%3E%20%3Cbody%3E%20%3Cdiv%20class%3D%22article-container%22%3E%20%24%7Bclone.outerHTML%7D%20%3C%2Fdiv%3E%20%3C%2Fbody%3E%20%3C%2Fhtml%3E%60%3B%20updateStatus('T%C3%A9l%C3%A9chargement...')%3B%20const%20fileName%20%3D%20%60x-article-%24%7BDate.now()%7D.html%60%3B%20const%20isIOS%20%3D%20%2FiPad%7CiPhone%7CiPod%2F.test(navigator.userAgent)%3B%20if%20(isIOS%20%26%26%20navigator.share)%20%7B%20const%20file%20%3D%20new%20File(%5Bhtml%5D%2C%20fileName%2C%20%7B%20type%3A%20'text%2Fhtml'%20%7D)%3B%20await%20navigator.share(%7B%20files%3A%20%5Bfile%5D%2C%20title%3A%20'X%20Article'%20%7D)%3B%20%7D%20else%20%7B%20const%20blob%20%3D%20new%20Blob(%5Bhtml%5D%2C%20%7B%20type%3A%20'text%2Fhtml'%20%7D)%3B%20const%20url%20%3D%20URL.createObjectURL(blob)%3B%20const%20a%20%3D%20document.createElement('a')%3B%20a.href%20%3D%20url%3B%20a.download%20%3D%20fileName%3B%20document.body.appendChild(a)%3B%20a.click()%3B%20document.body.removeChild(a)%3B%20URL.revokeObjectURL(url)%3B%20%7D%20updateStatus('%E2%9C%93%20Termin%C3%A9%20!')%3B%20await%20sleep(2000)%3B%20statusDiv.remove()%3B%20%7D%20catch%20(error)%20%7B%20updateStatus('%E2%9D%8C%20Erreur%3A%20'%20%2B%20error.message)%3B%20await%20sleep(4000)%3B%20statusDiv.remove()%3B%20%7D%20%7D)()%3B">📥 Extraire Article X</a>
+      </p>
+      <ol>
+        <li>Glissez le bouton bleu ci-dessus dans votre barre de favoris</li>
+        <li>Allez sur une page d'article X (vous devez etre connecte)</li>
+        <li>Cliquez sur le favori "Extraire Article X"</li>
+        <li>Attendez quelques secondes pendant la conversion des images</li>
+        <li>Le fichier HTML sera automatiquement telecharge</li>
+      </ol>
+    </div>
+
+    <div id="tab-iphone" class="tab-content instructions">
+      <h3>Installation sur iPhone / iPad</h3>
+      <p>Sur iOS Safari, les bookmarklets ne s'installent pas par glisser-deposer. Suivez ces etapes :</p>
+      <ol>
+        <li>Appuyez sur le bouton ci-dessous pour <strong>copier le code</strong> du bookmarklet</li>
+        <li>Ajoutez <strong>cette page</strong> aux signets Safari (bouton Partage → Ajouter un signet)</li>
+        <li>Ouvrez vos <strong>Signets</strong>, puis appuyez sur <strong>Modifier</strong></li>
+        <li>Selectionnez le signet que vous venez de creer</li>
+        <li>Supprimez l'URL et <strong>collez le code copie</strong> a la place</li>
+        <li>Renommez-le en <code>Extraire Article X</code> et enregistrez</li>
+      </ol>
+      <p>
+        <button class="copy-btn" id="copy-btn" onclick="copyBookmarklet()">Copier le code du bookmarklet</button>
+      </p>
+      <h3>Utilisation</h3>
+      <ol>
+        <li>Allez sur un article X dans Safari (vous devez etre connecte)</li>
+        <li>Ouvrez vos Signets et appuyez sur <code>Extraire Article X</code></li>
+        <li>Attendez l'extraction (indicateur bleu en haut a droite)</li>
+        <li>Le <strong>menu de partage iOS</strong> s'ouvrira pour enregistrer ou partager le fichier HTML</li>
+      </ol>
+    </div>
   </div>
 
   <div class="note">
-    <strong>Note :</strong> Le bookmarklet fonctionne directement dans votre navigateur. 
-    Aucune donnée n'est envoyée à un serveur externe. Tout le traitement est local.
+    <strong>Note :</strong> Le bookmarklet fonctionne directement dans votre navigateur.
+    Aucune donnee n'est envoyee a un serveur externe. Tout le traitement est local.
+    <br><br>
+    <strong>iPhone :</strong> Le fichier est partage via le menu natif iOS (Web Share API).
+    Vous pouvez l'enregistrer dans Fichiers, l'envoyer par AirDrop, Mail, etc.
+    Necessite iOS 15 ou plus recent.
   </div>
 
   <h2>Fonctionnalités</h2>
@@ -83,5 +148,45 @@
     <li>✓ Largeur de contenu en pleine largeur (100%)</li>
     <li>✓ Fonctionne en mode sombre et clair</li>
   </ul>
+  <script>
+    // Bookmarklet code - will be set dynamically when generating
+    var bookmarkletUrl = '';
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(function(btn, i) {
+        btn.classList.toggle('active', (tab === 'desktop' && i === 0) || (tab === 'iphone' && i === 1));
+      });
+      document.getElementById('tab-desktop').classList.toggle('active', tab === 'desktop');
+      document.getElementById('tab-iphone').classList.toggle('active', tab === 'iphone');
+    }
+
+    function copyBookmarklet() {
+      var btn = document.getElementById('copy-btn');
+      var url = document.getElementById('bookmarklet-link').href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function() {
+          btn.textContent = 'Copie !';
+          btn.classList.add('copied');
+          setTimeout(function() { btn.textContent = 'Copier le code du bookmarklet'; btn.classList.remove('copied'); }, 2000);
+        });
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.cssText = 'position:fixed;left:-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = 'Copie !';
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = 'Copier le code du bookmarklet'; btn.classList.remove('copied'); }, 2000);
+      }
+    }
+
+    // Auto-detect mobile and show iPhone tab
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+      switchTab('iphone');
+    }
+  </script>
 </body>
 </html>

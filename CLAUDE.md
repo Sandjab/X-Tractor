@@ -19,6 +19,7 @@ Extraire le contenu principal d'un article web (X, Medium, ou toute page) en fic
 │       ├── html-generator.js     # HTML standalone
 │       └── markdown-generator.js # Markdown (Turndown)
 ├── x-bookmarklet/                # Bookmarklet (JS pur, multi-source)
+│   └── readability.js            # Readability chargé dynamiquement via GitHub Pages
 └── x-extension/                  # Extension Chrome (Manifest V3, multi-source)
 ```
 
@@ -27,7 +28,7 @@ Les trois outils font la même chose avec des trade-offs différents :
 | Outil | Sources | Auth | Images CORS | Format | Poids |
 |-------|---------|------|-------------|--------|-------|
 | CLI Playwright | X, Medium, Web | Cookies (X) | Aucun problème | HTML, Markdown | ~300 Mo |
-| Bookmarklet | X, Medium, Web | Session navigateur | Parfois bloquées | HTML | ~9 Ko |
+| Bookmarklet | X, Medium, Web | Session navigateur | Parfois bloquées | HTML | ~10 Ko (+84 Ko Readability lazy) |
 | Extension | X, Medium, Web | Session navigateur | Parfois bloquées | HTML | ~80 Ko (avec Readability) |
 
 ## Architecture d'extraction
@@ -114,8 +115,8 @@ X utilise 600px, trop étroit sur grand écran. La pleine largeur avec padding d
 ### Pourquoi Readability pour le générique ?
 C'est la même technologie que le Reader View de Firefox. Très éprouvée, gère la majorité des sites. Licence Apache 2.0.
 
-### Pourquoi heuristique pour le bookmarklet ?
-Readability fait ~70 Ko, trop lourd pour un bookmarklet. L'approche heuristique (sélecteurs courants + fallback plus grand bloc) est plus légère et fonctionne sur la majorité des sites.
+### Pourquoi Readability dynamique pour le bookmarklet ?
+Readability fait ~84 Ko, trop lourd pour être inline dans un bookmarklet. Il est chargé dynamiquement depuis GitHub Pages uniquement pour les pages génériques, avec fallback heuristique si le chargement échoue. L'URL est injectée par `install.html` au moment de l'installation du bookmarklet.
 
 ## Commandes utiles
 

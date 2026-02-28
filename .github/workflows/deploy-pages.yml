@@ -1,4 +1,4 @@
-name: Deploy Bookmarklet to GitHub Pages
+name: Deploy Bookmarklet + Readability to GitHub Pages
 
 on:
   push:

@@ -8,6 +8,22 @@
   const updateStatus = (msg) => { statusDiv.textContent = msg; };
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+  // URL de Readability.js (remplacée dynamiquement par install.html)
+  const READABILITY_URL = '__READABILITY_URL__';
+
+  // Charge Readability.js dynamiquement si pas encore présent
+  function loadReadability() {
+    return new Promise((resolve, reject) => {
+      if (typeof Readability !== 'undefined') { resolve(); return; }
+      if (READABILITY_URL === '__READABILITY_' + 'URL__') { reject(new Error('URL non configurée')); return; }
+      const s = document.createElement('script');
+      s.src = READABILITY_URL;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Impossible de charger Readability'));
+      document.head.appendChild(s);
+    });
+  }
+
   // === Détection de la source ===
   function detectSource() {
     const host = window.location.hostname.toLowerCase();
@@ -63,8 +79,35 @@
     };
   }
 
-  // === Extraction générique (heuristique) ===
+  // === Extraction générique (Readability + fallback heuristique) ===
   function extractGeneric() {
+    const genericCss = 'figure{margin:2em 0}figure img{display:block;margin:0 auto}figcaption{text-align:center;font-size:0.875em;opacity:0.7}pre{background:rgba(128,128,128,0.1);padding:1em;border-radius:4px;overflow-x:auto}blockquote{border-left:3px solid currentColor;margin-left:0;padding-left:1.5em;opacity:0.85}a{color:#1d9bf0}';
+    const titleEl = document.querySelector('meta[property="og:title"]');
+    const siteNameEl = document.querySelector('meta[property="og:site_name"]');
+    const title = titleEl ? titleEl.content : document.title;
+    const siteName = siteNameEl ? siteNameEl.content : window.location.hostname;
+
+    // Essayer Readability d'abord (chargé dynamiquement)
+    if (typeof Readability !== 'undefined') {
+      try {
+        const docClone = document.cloneNode(true);
+        const reader = new Readability(docClone);
+        const article = reader.parse();
+        if (article && article.content) {
+          return {
+            html: article.content,
+            styles: '',
+            title: article.title || title,
+            siteName: siteName,
+            extraCss: genericCss
+          };
+        }
+      } catch (e) {
+        console.warn('Readability a échoué, fallback heuristique:', e.message);
+      }
+    }
+
+    // Fallback heuristique
     const candidates = [
       document.querySelector('article'),
       document.querySelector('[role="article"]'),
@@ -101,15 +144,12 @@
       clone.querySelectorAll(sel).forEach(el => el.remove());
     });
 
-    const titleEl = document.querySelector('meta[property="og:title"]');
-    const siteNameEl = document.querySelector('meta[property="og:site_name"]');
-
     return {
       html: clone.outerHTML,
       styles: '',
-      title: titleEl ? titleEl.content : document.title,
-      siteName: siteNameEl ? siteNameEl.content : window.location.hostname,
-      extraCss: 'figure{margin:2em 0}figure img{display:block;margin:0 auto}figcaption{text-align:center;font-size:0.875em;opacity:0.7}pre{background:rgba(128,128,128,0.1);padding:1em;border-radius:4px;overflow-x:auto}blockquote{border-left:3px solid currentColor;margin-left:0;padding-left:1.5em;opacity:0.85}a{color:#1d9bf0}'
+      title: title,
+      siteName: siteName,
+      extraCss: genericCss
     };
   }
 
@@ -129,6 +169,16 @@
   try {
     const source = detectSource();
     updateStatus(`Extraction (${source === 'x' ? 'X' : source === 'medium' ? 'Medium' : 'Web'})...`);
+
+    // Pour les pages génériques, charger Readability d'abord
+    if (source === 'generic') {
+      updateStatus('Chargement de Readability...');
+      try {
+        await loadReadability();
+      } catch (e) {
+        console.warn('Readability non disponible, fallback heuristique:', e.message);
+      }
+    }
 
     let data;
     if (source === 'x') {

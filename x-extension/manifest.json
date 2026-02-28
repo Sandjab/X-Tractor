@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "X Article Extractor",
-  "version": "1.0.0",
-  "description": "Extrait les articles X vers des fichiers HTML autonomes avec images embarquées",
+  "name": "X-Tractor",
+  "version": "2.0.0",
+  "description": "Extrait les articles de X, Medium, et tout site web vers des fichiers HTML autonomes avec images embarquées",
   "permissions": ["activeTab", "scripting", "downloads"],
-  "host_permissions": ["https://x.com/*", "https://twitter.com/*"],
+  "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

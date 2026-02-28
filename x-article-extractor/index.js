@@ -5,7 +5,14 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 
-// Fichier pour stocker les cookies de session
+import { detectSource, sourceLabel } from './extractors/detector.js';
+import * as xExtractor from './extractors/x-extractor.js';
+import * as mediumExtractor from './extractors/medium-extractor.js';
+import * as genericExtractor from './extractors/generic-extractor.js';
+import { generateHtml } from './output/html-generator.js';
+import { generateMarkdown } from './output/markdown-generator.js';
+
+// Fichier pour stocker les cookies de session X
 const COOKIES_FILE = path.join(os.homedir(), '.x-tractor-cookies.json');
 
 async function main() {
@@ -13,32 +20,41 @@ async function main() {
   const args = process.argv.slice(2);
   const headlessMode = args.includes('--headless');
   const loginMode = args.includes('--login');
+  const markdownMode = args.includes('--markdown') || args.includes('--md');
   const articleUrl = args.find(arg => !arg.startsWith('--'));
 
   if (!articleUrl && !loginMode) {
-    console.error('Usage: node index.js <article-url> [--headless]');
+    console.error('Usage: node index.js <url> [options]');
     console.error('       node index.js --login');
     console.error('');
-    console.error('Options:');
-    console.error('  --login     Se connecter à X et sauvegarder la session');
-    console.error('  --headless  Mode sans interface (pour MCP/automatisation)');
-    console.error('              Nécessite une session valide (--login d\'abord)');
+    console.error('Sources supportées:');
+    console.error('  - X (Twitter) : https://x.com/user/status/123');
+    console.error('  - Medium      : https://medium.com/@user/article-slug');
+    console.error('  - Toute page  : https://example.com/article');
     console.error('');
-    console.error('Workflow MCP:');
-    console.error('  1. node index.js --login              # Une fois, établir la session');
-    console.error('  2. node index.js <url> --headless     # Extractions automatiques');
+    console.error('Options:');
+    console.error('  --login       Se connecter à X et sauvegarder la session');
+    console.error('  --headless    Mode sans interface (pour MCP/automatisation)');
+    console.error('  --markdown    Exporter en Markdown au lieu de HTML');
+    console.error('  --md          Alias pour --markdown');
     console.error('');
     console.error('Exemples:');
     console.error('  node index.js --login');
     console.error('  node index.js https://x.com/user/status/123 --headless');
+    console.error('  node index.js https://medium.com/@user/my-article --markdown');
+    console.error('  node index.js https://example.com/blog/post');
     process.exit(1);
   }
 
-  // Mode login uniquement
+  // Mode login uniquement (pour X)
   if (loginMode) {
     await doLogin();
     return;
   }
+
+  // Détecter la source
+  const source = detectSource(articleUrl);
+  console.log(`Source détectée : ${sourceLabel(source)}`);
 
   if (headlessMode) {
     console.log('Mode headless (MCP)...');
@@ -46,65 +62,102 @@ async function main() {
     console.log('Lancement du navigateur...');
   }
 
-  // Lancer un navigateur Playwright
   const browser = await chromium.launch({
     headless: headlessMode,
-    channel: 'chrome'
+    channel: 'chrome',
   });
 
   const context = await browser.newContext({
     viewport: { width: 1400, height: 900 },
-    locale: 'fr-FR'
+    locale: 'fr-FR',
   });
 
   const page = await context.newPage();
 
   try {
-    // Charger les cookies et naviguer vers l'article (login manuel si nécessaire)
-    await loadOrLogin(context, page, articleUrl, headlessMode);
-    
-    // Wait for article content to load
-    console.log('Waiting for article content...');
-    await waitForArticleContent(page);
-    
-    // Extract article HTML
-    console.log('Extracting article content...');
-    const articleHtml = await extractArticle(page);
-    
-    // Convert images to base64
-    console.log('Converting images to base64...');
-    const htmlWithEmbeddedImages = await embedImages(page, articleHtml);
-    
-    // Generate standalone HTML
-    const standaloneHtml = generateStandaloneHtml(htmlWithEmbeddedImages);
-    
-    // Save to file
-    const outputFilename = `x-article-${Date.now()}.html`;
-    await fs.writeFile(outputFilename, standaloneHtml, 'utf-8');
-    console.log(`✓ Article saved to: ${outputFilename}`);
-    
+    // Pour X, gérer l'authentification
+    if (source === 'x') {
+      await loadOrLogin(context, page, articleUrl, headlessMode);
+    } else {
+      // Pour les autres sources, naviguer directement
+      console.log(`Navigation vers l'article...`);
+      await page.goto(articleUrl, { waitUntil: 'domcontentloaded' });
+    }
+
+    // Sélectionner l'extracteur approprié
+    const extractor = getExtractor(source);
+
+    // Attendre le contenu
+    console.log('Attente du contenu...');
+    await extractor.waitForContent(page);
+
+    // Extraire l'article
+    console.log('Extraction du contenu...');
+    const articleData = await extractor.extract(page);
+    console.log(`  Titre : ${articleData.title}`);
+    if (articleData.byline) console.log(`  Auteur : ${articleData.byline}`);
+
+    // Convertir les images en base64
+    console.log('Conversion des images en base64...');
+    const embedded = await embedImages(page, articleData);
+
+    // Générer la sortie
+    let output, ext;
+    if (markdownMode) {
+      output = generateMarkdown(embedded);
+      ext = 'md';
+    } else {
+      output = generateHtml(embedded, extractor.extraCss());
+      ext = 'html';
+    }
+
+    // Sauvegarder
+    const slug = slugify(articleData.siteName);
+    const outputFilename = `${slug}-article-${Date.now()}.${ext}`;
+    await fs.writeFile(outputFilename, output, 'utf-8');
+    console.log(`✓ Article sauvegardé : ${outputFilename}`);
+
   } catch (error) {
-    console.error('Error:', error.message);
-    // Take a screenshot for debugging
+    console.error('Erreur:', error.message);
     await page.screenshot({ path: 'error-screenshot.png' });
-    console.error('Screenshot saved to error-screenshot.png');
+    console.error('Capture d\'écran sauvegardée : error-screenshot.png');
     process.exit(1);
   } finally {
     await browser.close();
   }
 }
 
+/**
+ * Retourne le module extracteur correspondant à la source.
+ */
+function getExtractor(source) {
+  switch (source) {
+    case 'x': return xExtractor;
+    case 'medium': return mediumExtractor;
+    default: return genericExtractor;
+  }
+}
+
+/**
+ * Génère un slug pour le nom de fichier.
+ */
+function slugify(str) {
+  return (str || 'article').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// ===== Authentification X =====
+
 async function doLogin() {
   console.log('Lancement du navigateur pour connexion...');
 
   const browser = await chromium.launch({
     headless: false,
-    channel: 'chrome'
+    channel: 'chrome',
   });
 
   const context = await browser.newContext({
     viewport: { width: 1400, height: 900 },
-    locale: 'fr-FR'
+    locale: 'fr-FR',
   });
 
   const page = await context.newPage();
@@ -120,7 +173,6 @@ async function doLogin() {
 
     await page.goto('https://x.com/login', { waitUntil: 'domcontentloaded' });
 
-    // Attendre que l'utilisateur se connecte
     await page.waitForURL(
       url => !url.toString().includes('/login') &&
              !url.toString().includes('/i/flow/login') &&
@@ -130,12 +182,11 @@ async function doLogin() {
 
     await page.waitForTimeout(2000);
 
-    // Sauvegarder les cookies
     const cookies = await context.cookies();
     await fs.writeFile(COOKIES_FILE, JSON.stringify(cookies, null, 2));
     console.log('');
     console.log(`✓ Session sauvegardée dans ${COOKIES_FILE}`);
-    console.log('✓ Vous pouvez maintenant utiliser --headless pour les extractions');
+    console.log('✓ Vous pouvez maintenant utiliser --headless pour les extractions X');
 
   } finally {
     await browser.close();
@@ -144,42 +195,33 @@ async function doLogin() {
 
 async function loadOrLogin(context, page, articleUrl, headlessMode = false) {
   // Essayer de charger les cookies existants
-  let hasCookies = false;
   try {
     const cookiesData = await fs.readFile(COOKIES_FILE, 'utf-8');
     const cookies = JSON.parse(cookiesData);
     await context.addCookies(cookies);
-    console.log('✓ Cookies chargés');
-    hasCookies = true;
+    console.log('✓ Cookies X chargés');
   } catch (err) {
     if (headlessMode) {
-      throw new Error('SESSION_REQUIRED: Aucune session sauvegardée. Lancez d\'abord le script sans --headless pour vous connecter.');
+      throw new Error('SESSION_REQUIRED: Aucune session X sauvegardée. Lancez d\'abord : node index.js --login');
     }
-    console.log('Aucune session sauvegardée');
+    console.log('Aucune session X sauvegardée');
   }
 
-  // Aller directement sur l'article
   console.log(`Navigation vers l'article...`);
   await page.goto(articleUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2000);
 
-  // Vérifier si on est redirigé vers login
   const currentUrl = page.url();
   const needsLogin = currentUrl.includes('/login') ||
                      currentUrl.includes('/i/flow/login') ||
                      currentUrl.includes('/i/flow/signup');
 
-  if (!needsLogin) {
-    // Session valide, on continue
-    return;
-  }
+  if (!needsLogin) return;
 
-  // En mode headless, on ne peut pas demander de login manuel
   if (headlessMode) {
-    throw new Error('SESSION_EXPIRED: La session a expiré. Lancez le script sans --headless pour vous reconnecter.');
+    throw new Error('SESSION_EXPIRED: La session X a expiré. Lancez : node index.js --login');
   }
 
-  // Login manuel nécessaire
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════╗');
   console.log('║  Connectez-vous à X dans le navigateur qui vient de s\'ouvrir ║');
@@ -188,7 +230,6 @@ async function loadOrLogin(context, page, articleUrl, headlessMode = false) {
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log('');
 
-  // Attendre que l'utilisateur se connecte (max 5 minutes)
   await page.waitForURL(
     url => !url.toString().includes('/login') &&
            !url.toString().includes('/i/flow/login') &&
@@ -196,111 +237,29 @@ async function loadOrLogin(context, page, articleUrl, headlessMode = false) {
     { timeout: 300000 }
   );
 
-  // Petite pause pour s'assurer que la session est établie
   await page.waitForTimeout(2000);
 
-  // Si on n'est pas sur l'article, y aller
   if (!page.url().includes(articleUrl.split('/status/')[1])) {
     await page.goto(articleUrl, { waitUntil: 'domcontentloaded' });
   }
 
-  // Sauvegarder les cookies
   const cookies = await context.cookies();
   await fs.writeFile(COOKIES_FILE, JSON.stringify(cookies, null, 2));
-  console.log(`✓ Cookies sauvegardés`);
+  console.log(`✓ Cookies X sauvegardés`);
 }
 
-async function waitForArticleContent(page) {
-  // Wait for the article container to appear
-  // X articles typically have a specific structure
-  await page.waitForSelector('article', { timeout: 30000 });
-  
-  // Wait for any loading spinners to disappear
-  await page.waitForFunction(() => {
-    const spinners = document.querySelectorAll('[role="progressbar"]');
-    return spinners.length === 0;
-  }, { timeout: 15000 }).catch(() => {});
-  
-  // Additional wait for dynamic content
-  await page.waitForTimeout(2000);
-  
-  // Wait for images to load
-  await page.waitForFunction(() => {
-    const images = document.querySelectorAll('article img');
-    return Array.from(images).every(img => img.complete);
-  }, { timeout: 15000 }).catch(() => {});
-}
-
-async function extractArticle(page) {
-  return await page.evaluate(() => {
-    // Find the main article content
-    // X articles are typically in a specific container
-    const article = document.querySelector('article');
-    if (!article) {
-      throw new Error('Could not find article element');
-    }
-    
-    // Get the article and its parent for better context
-    const articleContainer = article.closest('[data-testid="tweet"]') || article;
-    
-    // Clone the node to manipulate it
-    const clone = articleContainer.cloneNode(true);
-    
-    // Remove unnecessary elements
-    const elementsToRemove = [
-      '[data-testid="reply"]',
-      '[data-testid="retweet"]', 
-      '[data-testid="like"]',
-      '[data-testid="bookmark"]',
-      '[data-testid="share"]',
-      '[role="group"]', // Action buttons
-    ];
-    
-    elementsToRemove.forEach(selector => {
-      clone.querySelectorAll(selector).forEach(el => el.remove());
-    });
-    
-    // Get computed styles for the article
-    const computedStyles = getComputedStyle(articleContainer);
-    
-    // Extract all stylesheets
-    const styles = Array.from(document.styleSheets)
-      .map(sheet => {
-        try {
-          return Array.from(sheet.cssRules || [])
-            .map(rule => rule.cssText)
-            .join('\n');
-        } catch (e) {
-          // Cross-origin stylesheets can't be accessed
-          return '';
-        }
-      })
-      .join('\n');
-    
-    return {
-      html: clone.outerHTML,
-      styles: styles,
-      bodyStyles: {
-        backgroundColor: computedStyles.backgroundColor || '#000',
-        color: computedStyles.color || '#fff',
-        fontFamily: computedStyles.fontFamily
-      }
-    };
-  });
-}
+// ===== Embedding images =====
 
 async function embedImages(page, articleData) {
-  const { html, styles, bodyStyles } = articleData;
+  const { html, styles } = articleData;
 
-  // Find all image URLs in HTML and CSS
   const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
   const backgroundRegex = /url\(["']?(https?:\/\/[^"')]+)["']?\)/g;
 
   let processedHtml = html;
-  let processedStyles = styles;
+  let processedStyles = styles || '';
   const imageUrls = new Set();
 
-  // Collect image URLs from img tags in HTML
   let match;
   while ((match = imgRegex.exec(html)) !== null) {
     if (match[1].startsWith('http')) {
@@ -308,20 +267,19 @@ async function embedImages(page, articleData) {
     }
   }
 
-  // Collect image URLs from background-image in HTML
   while ((match = backgroundRegex.exec(html)) !== null) {
     imageUrls.add(match[1]);
   }
 
-  // Collect image URLs from background-image in CSS styles
-  const backgroundRegex2 = /url\(["']?(https?:\/\/[^"')]+)["']?\)/g;
-  while ((match = backgroundRegex2.exec(styles)) !== null) {
-    imageUrls.add(match[1]);
+  if (styles) {
+    const bgRegex2 = /url\(["']?(https?:\/\/[^"')]+)["']?\)/g;
+    while ((match = bgRegex2.exec(styles)) !== null) {
+      imageUrls.add(match[1]);
+    }
   }
 
-  console.log(`Found ${imageUrls.size} images to convert...`);
+  console.log(`  ${imageUrls.size} images trouvées...`);
 
-  // Convert each image to base64
   let converted = 0;
   for (const url of imageUrls) {
     try {
@@ -337,81 +295,19 @@ async function embedImages(page, articleData) {
         });
       }, url);
 
-      // Replace URL with base64 in both HTML and CSS
       processedHtml = processedHtml.split(url).join(base64);
-      processedStyles = processedStyles.split(url).join(base64);
+      if (processedStyles) {
+        processedStyles = processedStyles.split(url).join(base64);
+      }
       converted++;
     } catch (error) {
-      console.warn(`⚠ Could not convert: ${url.substring(0, 60)}... (${error.message})`);
+      console.warn(`  ⚠ Non convertie: ${url.substring(0, 60)}... (${error.message})`);
     }
   }
 
-  console.log(`✓ Converted ${converted}/${imageUrls.size} images`);
+  console.log(`  ✓ ${converted}/${imageUrls.size} images converties`);
 
-  return { html: processedHtml, styles: processedStyles, bodyStyles };
-}
-
-function generateStandaloneHtml(articleData) {
-  const { html, styles, bodyStyles } = articleData;
-  
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>X Article</title>
-  <style>
-    /* Reset and base styles */
-    * {
-      box-sizing: border-box;
-    }
-    
-    body {
-      margin: 0;
-      padding: 20px;
-      background-color: ${bodyStyles.backgroundColor};
-      color: ${bodyStyles.color};
-      font-family: ${bodyStyles.fontFamily || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'};
-      line-height: 1.5;
-    }
-    
-    /* Container full width */
-    .article-container {
-      max-width: 100%;
-      margin: 0 auto;
-      padding: 20px 40px;
-    }
-    
-    /* Responsive images */
-    img {
-      max-width: 100%;
-      height: auto;
-    }
-    
-    /* Original X styles */
-    ${styles}
-    
-    /* Override X's narrow width constraints */
-    [style*="max-width: 600px"],
-    [style*="max-width:600px"],
-    [style*="max-width: 598px"],
-    [style*="max-width:598px"] {
-      max-width: 100% !important;
-    }
-
-    /* Force all content to expand */
-    article, article > div {
-      max-width: 100% !important;
-      width: 100% !important;
-    }
-  </style>
-</head>
-<body>
-  <div class="article-container">
-    ${html}
-  </div>
-</body>
-</html>`;
+  return { ...articleData, html: processedHtml, styles: processedStyles };
 }
 
 main();

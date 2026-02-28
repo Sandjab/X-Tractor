@@ -1,7 +1,7 @@
 {
   "name": "x-article-extractor",
-  "version": "1.1.0",
-  "description": "Extract X articles to standalone HTML files (CLI + MCP server)",
+  "version": "2.0.0",
+  "description": "Extract articles from X, Medium, and any web page to standalone HTML/Markdown files (CLI + MCP server)",
   "type": "module",
   "main": "index.js",
   "bin": {
@@ -15,6 +15,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "playwright": "^1.40.0"
+    "@mozilla/readability": "^0.5.0",
+    "jsdom": "^25.0.0",
+    "playwright": "^1.40.0",
+    "turndown": "^7.2.0"
   }
 }

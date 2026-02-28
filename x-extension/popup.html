@@ -19,6 +19,26 @@
       gap: 8px;
     }
     h1 span { font-size: 20px; }
+    .source-info {
+      background: #192734;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .source-badge {
+      background: #1d9bf0;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+    .source-badge.medium { background: #00ab6c; }
+    .source-badge.generic { background: #8b98a5; }
     .status {
       background: #192734;
       border-radius: 8px;
@@ -72,13 +92,16 @@
   </style>
 </head>
 <body>
-  <h1><span>📰</span> X Article Extractor</h1>
+  <h1><span>📰</span> X-Tractor</h1>
+  <div id="source-info" class="source-info" style="display:none">
+    Source : <span id="source-badge" class="source-badge">-</span>
+  </div>
   <div id="status" class="status">Prêt à extraire</div>
   <div id="progress" class="progress">
     <div id="progress-bar" class="progress-bar"></div>
   </div>
   <button id="extract-btn">Extraire l'article</button>
-  <div class="info">Les images seront embarquées en base64</div>
+  <div class="info">X, Medium, et toute page web - images en base64</div>
   <script src="popup.js"></script>
 </body>
 </html>

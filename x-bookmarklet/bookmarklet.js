@@ -127,15 +127,23 @@
 
     // Télécharger le fichier
     updateStatus('Téléchargement...');
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `x-article-${Date.now()}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const fileName = `x-article-${Date.now()}.html`;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+    if (isIOS && navigator.share) {
+      const file = new File([html], fileName, { type: 'text/html' });
+      await navigator.share({ files: [file], title: 'X Article' });
+    } else {
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
 
     updateStatus('✓ Terminé !');
     await sleep(2000);

@@ -277,15 +277,44 @@
 </html>`;
 
     // Télécharger le fichier
-    updateStatus('Téléchargement...');
     const slug = data.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const fileName = `${slug}-article-${Date.now()}.html`;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-    if (isIOS && navigator.share) {
-      const file = new File([html], fileName, { type: 'text/html' });
-      await navigator.share({ files: [file], title: data.title });
+    if (isIOS) {
+      // Sur iOS, navigator.share() exige un geste utilisateur frais.
+      // Après le traitement async des images, le geste initial a expiré.
+      // On affiche un bouton pour que l'utilisateur tape dessus.
+      statusDiv.textContent = '';
+      statusDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#1d9bf0;color:white;padding:8px 12px;border-radius:12px;z-index:999999;font-family:system-ui;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;gap:8px;';
+      const btn = document.createElement('button');
+      btn.textContent = '📥 Enregistrer';
+      btn.style.cssText = 'background:white;color:#1d9bf0;border:none;padding:10px 20px;border-radius:20px;font-size:15px;font-weight:bold;cursor:pointer;font-family:system-ui;';
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.style.cssText = 'background:none;border:none;color:white;font-size:18px;cursor:pointer;padding:4px 8px;';
+      closeBtn.onclick = () => statusDiv.remove();
+      btn.onclick = async () => {
+        try {
+          const file = new File([html], fileName, { type: 'text/html' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: data.title });
+          } else {
+            const b = new Blob([html], { type: 'text/html' });
+            window.open(URL.createObjectURL(b), '_blank');
+          }
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+          const b = new Blob([html], { type: 'text/html' });
+          window.open(URL.createObjectURL(b), '_blank');
+        }
+        statusDiv.remove();
+      };
+      statusDiv.appendChild(btn);
+      statusDiv.appendChild(closeBtn);
     } else {
+      updateStatus('Téléchargement...');
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -295,11 +324,10 @@
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      updateStatus('✓ Terminé !');
+      await sleep(2000);
+      statusDiv.remove();
     }
-
-    updateStatus('✓ Terminé !');
-    await sleep(2000);
-    statusDiv.remove();
 
   } catch (error) {
     updateStatus('❌ Erreur: ' + error.message);

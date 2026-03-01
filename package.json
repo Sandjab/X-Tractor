@@ -1,5 +1,10 @@
 {
   "devDependencies": {
     "terser": "^5.46.0"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "readability": "^0.1.0",
+    "turndown": "^7.2.2"
   }
 }

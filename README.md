@@ -35,6 +35,10 @@ Le web regorge de contenu de qualité, mais l'accès est souvent entravé par de
 
 ## Installation
 
+### Prérequis (CLI uniquement)
+
+- [Node.js](https://nodejs.org/) v18 ou supérieur
+
 ### CLI Playwright
 
 ```bash

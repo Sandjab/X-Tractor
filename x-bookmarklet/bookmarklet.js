@@ -94,12 +94,31 @@
         const reader = new Readability(docClone);
         const article = reader.parse();
         if (article && article.content) {
+          let headerHtml = '';
+
+          // Image à la une via og:image (universel, pas spécifique WordPress)
+          const ogImage = document.querySelector('meta[property="og:image"]');
+          if (ogImage && ogImage.content) {
+            headerHtml += '<figure class="x-tractor-featured"><img src="' + ogImage.content + '" alt=""></figure>';
+          }
+
+          // Titre : seulement si le content ne commence pas déjà par un <h1>
+          const articleTitle = article.title || title;
+          if (articleTitle && !article.content.trimStart().match(/^<h1[\s>]/i)) {
+            headerHtml += '<h1 class="x-tractor-title">' + articleTitle.replace(/</g, '&lt;') + '</h1>';
+          }
+
+          // Byline
+          if (article.byline) {
+            headerHtml += '<div class="x-tractor-byline">' + article.byline.replace(/</g, '&lt;') + '</div>';
+          }
+
           return {
-            html: article.content,
+            html: headerHtml + article.content,
             styles: '',
-            title: article.title || title,
+            title: articleTitle,
             siteName: siteName,
-            extraCss: genericCss
+            extraCss: genericCss + '.x-tractor-featured{margin:0 0 1.5em 0;text-align:center}.x-tractor-featured img{max-width:100%;height:auto;border-radius:4px}.x-tractor-title{margin:0 0 0.3em 0;line-height:1.2}.x-tractor-byline{opacity:0.6;font-size:0.9em;margin-bottom:1.5em;padding-bottom:1em;border-bottom:1px solid rgba(128,128,128,0.3)}'
           };
         }
       } catch (e) {

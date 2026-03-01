@@ -33,10 +33,11 @@ export async function extract(page) {
   const dom = new JSDOM(pageContent, { url: pageUrl });
   const doc = dom.window.document;
 
-  // Métadonnées
+  // Métadonnées (extraire avant Readability qui modifie le DOM)
   const ogTitle = doc.querySelector('meta[property="og:title"]');
   const metaAuthor = doc.querySelector('meta[name="author"]');
   const ogSiteName = doc.querySelector('meta[property="og:site_name"]');
+  const ogImage = doc.querySelector('meta[property="og:image"]');
 
   const reader = new Readability(doc);
   const article = reader.parse();
@@ -66,6 +67,7 @@ export async function extract(page) {
     byline,
     siteName,
     bodyStyles,
+    featuredImage: ogImage ? ogImage.content : '',
   };
 }
 

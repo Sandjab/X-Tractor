@@ -35,13 +35,17 @@ turndown.addRule('figure', {
  * @returns {string} Contenu Markdown
  */
 export function generateMarkdown(articleData) {
-  const { html, title, byline, siteName } = articleData;
+  const { html, title, byline, siteName, featuredImage } = articleData;
 
   const lines = [];
 
   // Front matter
   lines.push(`# ${title || 'Article'}`);
   lines.push('');
+  if (featuredImage) {
+    lines.push(`![](${featuredImage})`);
+    lines.push('');
+  }
   if (byline || siteName) {
     const parts = [];
     if (byline) parts.push(`**Auteur** : ${byline}`);

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "X-Tractor",
   "version": "2.0.0",
-  "description": "Extrait les articles de X, Medium, et tout site web vers des fichiers HTML autonomes avec images embarquées",
+  "description": "Extrait les articles de X, Medium, LinkedIn, et tout site web vers des fichiers HTML autonomes avec images embarquées",
   "permissions": ["activeTab", "scripting", "downloads"],
   "host_permissions": ["<all_urls>"],
   "action": {

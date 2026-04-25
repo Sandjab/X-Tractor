@@ -8,6 +8,7 @@ import os from 'os';
 import { detectSource, sourceLabel } from './extractors/detector.js';
 import * as xExtractor from './extractors/x-extractor.js';
 import * as mediumExtractor from './extractors/medium-extractor.js';
+import * as linkedinExtractor from './extractors/linkedin-extractor.js';
 import * as genericExtractor from './extractors/generic-extractor.js';
 import { generateHtml } from './output/html-generator.js';
 import { generateMarkdown } from './output/markdown-generator.js';
@@ -30,6 +31,7 @@ async function main() {
     console.error('Sources supportées:');
     console.error('  - X (Twitter) : https://x.com/user/status/123');
     console.error('  - Medium      : https://medium.com/@user/article-slug');
+    console.error('  - LinkedIn    : https://www.linkedin.com/pulse/article-slug');
     console.error('  - Toute page  : https://example.com/article');
     console.error('');
     console.error('Options:');
@@ -42,6 +44,7 @@ async function main() {
     console.error('  node index.js --login');
     console.error('  node index.js https://x.com/user/status/123 --headless');
     console.error('  node index.js https://medium.com/@user/my-article --markdown');
+    console.error('  node index.js https://www.linkedin.com/pulse/my-article-slug');
     console.error('  node index.js https://example.com/blog/post');
     process.exit(1);
   }
@@ -134,6 +137,7 @@ function getExtractor(source) {
   switch (source) {
     case 'x': return xExtractor;
     case 'medium': return mediumExtractor;
+    case 'linkedin': return linkedinExtractor;
     default: return genericExtractor;
   }
 }
@@ -251,53 +255,96 @@ async function loadOrLogin(context, page, articleUrl, headlessMode = false) {
 // ===== Embedding images =====
 
 async function embedImages(page, articleData) {
-  const { html, styles } = articleData;
+  const { html, styles, featuredImage } = articleData;
 
   const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/g;
   const backgroundRegex = /url\(["']?(https?:\/\/[^"')]+)["']?\)/g;
 
   let processedHtml = html;
   let processedStyles = styles || '';
+  let processedFeatured = featuredImage || '';
   const imageUrls = new Set();
+
+  // Décoder les entités HTML (notamment &amp; → &) car outerHTML les encode.
+  // On garde la version encodée (telle que présente dans le HTML) pour la substitution
+  // et la version décodée pour le fetch (sinon le serveur reçoit "&amp;" en query string).
+  const decodeEntities = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  // Map: URL telle qu'elle apparaît dans le HTML → URL décodée à utiliser pour fetch
+  const urlToFetch = new Map();
 
   let match;
   while ((match = imgRegex.exec(html)) !== null) {
     if (match[1].startsWith('http')) {
-      imageUrls.add(match[1]);
+      const encoded = match[1];
+      imageUrls.add(encoded);
+      urlToFetch.set(encoded, decodeEntities(encoded));
     }
   }
 
   while ((match = backgroundRegex.exec(html)) !== null) {
-    imageUrls.add(match[1]);
+    const encoded = match[1];
+    imageUrls.add(encoded);
+    urlToFetch.set(encoded, decodeEntities(encoded));
   }
 
   if (styles) {
     const bgRegex2 = /url\(["']?(https?:\/\/[^"')]+)["']?\)/g;
     while ((match = bgRegex2.exec(styles)) !== null) {
-      imageUrls.add(match[1]);
+      const encoded = match[1];
+      imageUrls.add(encoded);
+      urlToFetch.set(encoded, decodeEntities(encoded));
     }
+  }
+
+  // Inclure l'image à la une (réinjectée par html-generator) pour offline complet
+  if (featuredImage && featuredImage.startsWith('http')) {
+    imageUrls.add(featuredImage);
+    urlToFetch.set(featuredImage, decodeEntities(featuredImage));
   }
 
   console.log(`  ${imageUrls.size} images trouvées...`);
 
   let converted = 0;
   for (const url of imageUrls) {
+    const fetchUrl = urlToFetch.get(url) || url;
     try {
-      const base64 = await page.evaluate(async (imageUrl) => {
-        const response = await fetch(imageUrl, { credentials: 'include' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
+      // Tenter d'abord le fetch in-browser (preserve les credentials/cookies de la page)
+      // Si CORS bloque, fallback sur le fetch server-side de Playwright (bypass CORS)
+      let base64;
+      try {
+        base64 = await page.evaluate(async (imageUrl) => {
+          const response = await fetch(imageUrl, { credentials: 'include' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }, fetchUrl);
+      } catch (corsErr) {
+        // Fallback : fetch server-side via Playwright (pas de CORS)
+        // Certains CDN (LinkedIn media.licdn.com) renvoient 403 sans le bon Referer.
+        const pageUrl = page.url();
+        const response = await page.context().request.get(fetchUrl, {
+          headers: {
+            'Referer': pageUrl,
+            'User-Agent': await page.evaluate(() => navigator.userAgent),
+          },
         });
-      }, url);
+        if (!response.ok()) throw new Error(`HTTP ${response.status()}`);
+        const buf = await response.body();
+        const contentType = response.headers()['content-type'] || 'image/jpeg';
+        base64 = `data:${contentType};base64,${buf.toString('base64')}`;
+      }
 
       processedHtml = processedHtml.split(url).join(base64);
       if (processedStyles) {
         processedStyles = processedStyles.split(url).join(base64);
+      }
+      if (processedFeatured === url) {
+        processedFeatured = base64;
       }
       converted++;
     } catch (error) {
@@ -307,7 +354,7 @@ async function embedImages(page, articleData) {
 
   console.log(`  ✓ ${converted}/${imageUrls.size} images converties`);
 
-  return { ...articleData, html: processedHtml, styles: processedStyles };
+  return { ...articleData, html: processedHtml, styles: processedStyles, featuredImage: processedFeatured };
 }
 
 main();

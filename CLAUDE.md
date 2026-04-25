@@ -2,7 +2,7 @@
 
 ## Objectif
 
-Extraire le contenu principal d'un article web (X, Medium, ou toute page) en fichier HTML ou Markdown autonome, consultable hors-ligne, avec images embarquées en base64. Le rendu doit préserver le style d'origine avec une largeur de contenu en pleine largeur (100%) pour une meilleure lisibilité sur grand écran.
+Extraire le contenu principal d'un article web (X, Medium, LinkedIn, ou toute page) en fichier HTML ou Markdown autonome, consultable hors-ligne, avec images embarquées en base64. Le rendu doit préserver le style d'origine avec une largeur de contenu en pleine largeur (100%) pour une meilleure lisibilité sur grand écran.
 
 ## Structure du projet
 
@@ -14,6 +14,7 @@ Extraire le contenu principal d'un article web (X, Medium, ou toute page) en fic
 │   │   ├── detector.js           # Détection du type de source (URL/DOM)
 │   │   ├── x-extractor.js        # Extracteur X (Twitter)
 │   │   ├── medium-extractor.js   # Extracteur Medium
+│   │   ├── linkedin-extractor.js # Extracteur LinkedIn (Pulse)
 │   │   └── generic-extractor.js  # Extracteur générique (Readability)
 │   └── output/                   # Générateurs de sortie
 │       ├── html-generator.js     # HTML standalone
@@ -27,17 +28,17 @@ Les trois outils font la même chose avec des trade-offs différents :
 
 | Outil | Sources | Auth | Images CORS | Format | Poids |
 |-------|---------|------|-------------|--------|-------|
-| CLI Playwright | X, Medium, Web | Cookies (X) | Aucun problème | HTML, Markdown | ~300 Mo |
-| Bookmarklet | X, Medium, Web | Session navigateur | Parfois bloquées | HTML | ~10 Ko (+84 Ko Readability lazy) |
-| Extension | X, Medium, Web | Session navigateur | Parfois bloquées | HTML | ~80 Ko (avec Readability) |
+| CLI Playwright | X, Medium, LinkedIn, Web | Cookies (X) | Fallback server-side avec Referer | HTML, Markdown | ~300 Mo |
+| Bookmarklet | X, Medium, LinkedIn, Web | Session navigateur | Parfois bloquées | HTML | ~17 Ko (+84 Ko Readability lazy) |
+| Extension | X, Medium, LinkedIn, Web | Session navigateur | Parfois bloquées | HTML | ~80 Ko (avec Readability) |
 
 ## Architecture d'extraction
 
 ### Pipeline commun
 
-1. **Détection** : URL pattern matching + meta tags DOM → `'x' | 'medium' | 'generic'`
-2. **Extraction** : Module spécifique à la source → `{ html, styles, title, byline, siteName, bodyStyles }`
-3. **Embedding images** : Fetch + base64 (CLI via Playwright page.evaluate, bookmarklet/extension via fetch/canvas)
+1. **Détection** : URL pattern matching + meta tags DOM → `'x' | 'medium' | 'linkedin' | 'generic'`
+2. **Extraction** : Module spécifique à la source → `{ html, styles, title, byline, featuredImage, siteName, bodyStyles }`
+3. **Embedding images** : Fetch + base64. CLI: in-browser fetch puis fallback server-side avec Referer (LinkedIn licdn). Décode les entités HTML (`&amp;`) avant fetch. Bookmarklet/extension via fetch/canvas.
 4. **Génération sortie** : HTML template ou Markdown (Turndown)
 
 ### Extracteur X (`x-extractor.js`)
@@ -50,6 +51,15 @@ Les trois outils font la même chose avec des trade-offs différents :
 - Sélecteurs : `article`, `[data-testid="storyContent"]`, `.meteredContent`
 - Nettoyage : actions sociales, CTA, recommendations, paywall banner, commentaires
 - CLI : fallback Readability via JSDOM si sélecteurs échouent
+
+### Extracteur LinkedIn (`linkedin-extractor.js`)
+- Sélecteur principal : `[data-test-id="article-content-blocks"]` (corps seul, sans header/cover/share)
+- Fallback : `<article class="article-main">` avec nettoyage
+- Nettoyage : nav/header/footer, ellipsis menu, social actions (likes/comments/share), `inline-recommended-articles`, sign-in CTAs, topic pills, author card
+- Image cover : récupérée depuis `og:image` puis ré-injectée (la cover dans le DOM est supprimée)
+- Auteur : extrait du lien `data-tracking-control-name="article-ssr-frontend-pulse_publisher-author-card"`
+- **Lazy load** : LinkedIn utilise `data-delayed-url` pour les images. L'extracteur promeut systématiquement vers `src` avant l'embedding
+- LinkedIn n'a pas de détection bot agressive : le mode `--headless` fonctionne sans setup
 
 ### Extracteur générique (`generic-extractor.js`)
 - CLI : Mozilla Readability (JSDOM + @mozilla/readability)
@@ -71,12 +81,15 @@ X est une SPA React. Les sélecteurs peuvent changer sans préavis :
 - Meta tags stables pour la détection : `al:android:package`, `og:*`, `meta[name="generator"]`
 - Articles sur domaines custom : détection via meta tags Medium
 
-### CORS (bookmarklet & extension uniquement)
-Les images sur `pbs.twimg.com` et certains CDN ont des headers CORS restrictifs :
-1. `fetch()` avec `mode: 'cors'` → échoue souvent
+### CORS et 403 sur les CDN
+Les images sur `pbs.twimg.com`, `media.licdn.com` et certains CDN ont des règles strictes :
+1. `fetch()` avec `mode: 'cors'` (in-browser) → échoue souvent (CORS)
 2. Canvas `drawImage()` + `toDataURL()` → échoue si l'image n'a pas les bons headers
+3. Server-side fetch → 403 sans le bon Referer (LinkedIn licdn surtout)
 
-Le CLI Playwright n'a pas ce problème car il exécute le fetch dans le contexte du navigateur contrôlé.
+**CLI** : double tentative — d'abord `fetch()` in-browser via `page.evaluate` (préserve les credentials de la page), fallback sur `page.context().request.get()` avec headers `Referer` + `User-Agent` recopiés. Décode aussi les entités HTML (`&amp;` → `&`) avant fetch sinon le serveur reçoit `?e=…&amp;v=…&amp;t=…` et rejette.
+
+**Bookmarklet/extension** : pas de fallback server-side, certaines images peuvent échouer.
 
 ### Authentification X
 - Login classique : email/username → password (géré)
@@ -127,6 +140,7 @@ npm install && npx playwright install chromium
 node index.js --login                                        # Session X
 node index.js https://x.com/user/status/123 --headless       # Article X
 node index.js https://medium.com/@user/article               # Article Medium
+node index.js https://www.linkedin.com/pulse/article-slug    # Article LinkedIn Pulse
 node index.js https://example.com/blog/post                  # Page web
 node index.js https://example.com/blog/post --markdown        # Export Markdown
 

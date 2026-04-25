@@ -5,7 +5,7 @@
 /**
  * Détecte le type de source à partir de l'URL.
  * @param {string} url
- * @returns {'x' | 'medium' | 'generic'}
+ * @returns {'x' | 'medium' | 'linkedin' | 'generic'}
  */
 export function detectSource(url) {
   try {
@@ -20,6 +20,11 @@ export function detectSource(url) {
     // Medium (domaine principal + sous-domaines connus)
     if (host === 'medium.com' || host.endsWith('.medium.com')) {
       return 'medium';
+    }
+
+    // LinkedIn (Pulse + tous sous-domaines fr/de/es/...)
+    if (host === 'linkedin.com' || host.endsWith('.linkedin.com')) {
+      return 'linkedin';
     }
 
     return 'generic';
@@ -44,6 +49,10 @@ export function detectSourceFromDOM() {
     return 'medium';
   }
 
+  if (host === 'linkedin.com' || host.endsWith('.linkedin.com')) {
+    return 'linkedin';
+  }
+
   // Détection Medium sur domaine custom via meta tags
   const generator = document.querySelector('meta[name="generator"]');
   if (generator && generator.content && generator.content.toLowerCase().includes('medium')) {
@@ -61,6 +70,6 @@ export function detectSourceFromDOM() {
  * Retourne un label lisible pour le type de source.
  */
 export function sourceLabel(source) {
-  const labels = { x: 'X (Twitter)', medium: 'Medium', generic: 'Web' };
+  const labels = { x: 'X (Twitter)', medium: 'Medium', linkedin: 'LinkedIn', generic: 'Web' };
   return labels[source] || source;
 }

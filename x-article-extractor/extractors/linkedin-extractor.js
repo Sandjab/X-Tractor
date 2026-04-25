@@ -12,7 +12,7 @@ import { JSDOM } from 'jsdom';
  */
 export async function waitForContent(page) {
   // Le contenu Pulse est server-side rendered, il est donc présent dès domcontentloaded
-  await page.waitForSelector('[data-test-id="article-content-blocks"], article.article-main', { timeout: 30000 }).catch(() => {});
+  await page.waitForSelector('[data-test-id="article-content-blocks"], .reader-content-blocks-container, article.article-main', { timeout: 30000 }).catch(() => {});
 
   // Attendre que les images soient chargées (cover + inline)
   await page.waitForFunction(() => {
@@ -35,16 +35,20 @@ export async function extract(page) {
   const doc = dom.window.document;
 
   const ogTitle = doc.querySelector('meta[property="og:title"]');
+  const readerTitle = doc.querySelector('h1.reader-article-header__title');
   // Parse "(N) Titre | LinkedIn" → "Titre" pour le mode logué/auteur
   const parseDocTitle = (t) => (t || '').replace(/^\s*\(\d+\)\s*/, '').replace(/\s*\|\s*LinkedIn\s*$/i, '').trim();
-  const title = ogTitle ? ogTitle.content : (doc.querySelector('h1.pulse-title')?.textContent?.trim() || parseDocTitle(doc.querySelector('title')?.textContent) || 'LinkedIn Article');
+  const title = (ogTitle && ogTitle.content) || readerTitle?.textContent?.trim() || doc.querySelector('h1.pulse-title')?.textContent?.trim() || parseDocTitle(doc.querySelector('title')?.textContent) || 'LinkedIn Article';
 
-  // Auteur : LinkedIn n'a pas de meta[name=author] sur Pulse, on lit la card
+  // Auteur : og > tracking-card > reader DOM
   const authorLink = doc.querySelector('a[data-tracking-control-name="article-ssr-frontend-pulse_publisher-author-card"]');
-  const byline = authorLink ? authorLink.textContent.trim().replace(/\s+/g, ' ') : '';
+  const readerAuthors = doc.querySelectorAll('.reader-author-info__container a');
+  const readerAuthor = Array.from(readerAuthors).find(a => a.textContent.trim());
+  const byline = authorLink ? authorLink.textContent.trim().replace(/\s+/g, ' ') : (readerAuthor ? readerAuthor.textContent.trim().replace(/\s+/g, ' ') : '');
 
   const ogImage = doc.querySelector('meta[property="og:image"]');
-  const featuredImage = ogImage ? ogImage.content : '';
+  const readerCover = doc.querySelector('article > header figure img');
+  const featuredImage = (ogImage && ogImage.content) || (readerCover && readerCover.src) || '';
 
   // Extraction côté page (pour éviter de perdre les attributs/styles)
   const linkedinHtml = await page.evaluate(() => {
@@ -53,6 +57,7 @@ export async function extract(page) {
     // on retourne null pour que Readability prenne le relais (DOM logué/auteur).
     const selectors = [
       '[data-test-id="article-content-blocks"]',
+      '.reader-content-blocks-container',
       'article.article-main',
       'article.pulse',
     ];
@@ -93,6 +98,8 @@ export async function extract(page) {
       '[data-tracking-control-name*="see_all_articles"]',
       '[data-tracking-control-name*="see_more"]',
       '[data-tracking-control-name*="show_more"]',
+      '.content-author-card',
+      '.inline-article',
       // Social actions (likes, commentaires, partage)
       '[data-test-id^="social-actions"]',
       '[data-tracking-control-name*="social-share"]',
@@ -124,6 +131,51 @@ export async function extract(page) {
         clone.querySelectorAll(sel).forEach(el => el.remove());
       } catch (e) {
         // ignore selectors non supportés
+      }
+    });
+
+    // Bloc "Recommandé par LinkedIn" (h2 + container de cards)
+    clone.querySelectorAll('h2').forEach(h2 => {
+      if (/recommand/i.test(h2.textContent)) {
+        const next = h2.nextElementSibling;
+        if (next) next.remove();
+        h2.remove();
+      }
+    });
+
+    // Convertir les spans Tailwind en sémantique HTML
+    clone.querySelectorAll('span.italic').forEach(s => {
+      const em = document.createElement('em');
+      while (s.firstChild) em.appendChild(s.firstChild);
+      s.replaceWith(em);
+    });
+    clone.querySelectorAll('span[class*="font-[700]"]').forEach(s => {
+      const strong = document.createElement('strong');
+      while (s.firstChild) strong.appendChild(s.firstChild);
+      s.replaceWith(strong);
+    });
+
+    // Déballer les <span class=""> vides
+    clone.querySelectorAll('span').forEach(s => {
+      if (!s.className || s.className === '') {
+        s.replaceWith(...s.childNodes);
+      }
+    });
+
+    // Supprimer les comment nodes
+    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    comments.forEach(c => c.remove());
+
+    // Supprimer les attributs LinkedIn résiduels (inclut l'élément racine)
+    if (clone.hasAttribute('data-test-id')) clone.removeAttribute('data-test-id');
+    clone.querySelectorAll('[data-test-id]').forEach(el => el.removeAttribute('data-test-id'));
+    clone.querySelectorAll('[rel="ugc"]').forEach(el => el.removeAttribute('rel'));
+    clone.querySelectorAll('[class]').forEach(el => {
+      const cls = el.getAttribute('class');
+      if (cls && /(babybear|mamabear|papabear|text-color-|bg-color-)/.test(cls)) {
+        el.removeAttribute('class');
       }
     });
 

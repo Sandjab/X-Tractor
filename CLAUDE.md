@@ -53,11 +53,17 @@ Les trois outils font la même chose avec des trade-offs différents :
 - CLI : fallback Readability via JSDOM si sélecteurs échouent
 
 ### Extracteur LinkedIn (`linkedin-extractor.js`)
-- Sélecteur principal : `[data-test-id="article-content-blocks"]` (corps seul, sans header/cover/share)
-- Fallback : `<article class="article-main">` avec nettoyage
-- Nettoyage : nav/header/footer, ellipsis menu, social actions (likes/comments/share), `inline-recommended-articles`, sign-in CTAs, topic pills, author card
-- Image cover : récupérée depuis `og:image` puis ré-injectée (la cover dans le DOM est supprimée)
-- Auteur : extrait du lien `data-tracking-control-name="article-ssr-frontend-pulse_publisher-author-card"`
+- **Dual DOM** : LinkedIn a deux rendus différents selon le contexte de navigation
+  - **Public SSR** : `[data-test-id="article-content-blocks"]` — Tailwind classes, `data-delayed-url` pour lazy load
+  - **Logué / auteur** : `.reader-content-blocks-container` — Ember components (`p.ember-view.reader-text-block__paragraph`), comment nodes `<!---->` partout
+- Fallbacks sélecteurs : `article.article-main`, `article.pulse`
+- Si aucun sélecteur Pulse ne matche → fallback Readability (DOM logué/auteur)
+- Nettoyage : nav/header/footer, ellipsis menu, social actions (likes/comments/share), `inline-recommended-articles`, `content-author-card`, `inline-article`, sign-in CTAs, topic pills, author card, bloc h2 "Recommandé"
+- **Conversion sémantique** : `span.italic` → `<em>`, `span[class*="font-[700]"]` → `<strong>`, déballe les `<span class="">` vides
+- **Nettoyage attributs** : supprime `data-test-id`, `rel="ugc"`, classes Tailwind (`babybear`, `mamabear`, `text-color-*`), comment nodes
+- Image cover : récupérée depuis `og:image` ou `article > header figure img` puis ré-injectée
+- Auteur : `data-tracking-control-name="article-ssr-frontend-pulse_publisher-author-card"` ou `.reader-author-info__container a` (filtre le lien avatar vide)
+- Titre : `og:title` > `h1.reader-article-header__title` > `h1.pulse-title` > `<title>` (parse le format `(N) Titre | LinkedIn`)
 - **Lazy load** : LinkedIn utilise `data-delayed-url` pour les images. L'extracteur promeut systématiquement vers `src` avant l'embedding
 - LinkedIn n'a pas de détection bot agressive : le mode `--headless` fonctionne sans setup
 
@@ -89,7 +95,9 @@ Les images sur `pbs.twimg.com`, `media.licdn.com` et certains CDN ont des règle
 
 **CLI** : double tentative — d'abord `fetch()` in-browser via `page.evaluate` (préserve les credentials de la page), fallback sur `page.context().request.get()` avec headers `Referer` + `User-Agent` recopiés. Décode aussi les entités HTML (`&amp;` → `&`) avant fetch sinon le serveur reçoit `?e=…&amp;v=…&amp;t=…` et rejette.
 
-**Bookmarklet/extension** : pas de fallback server-side, certaines images peuvent échouer.
+**Bookmarklet** : conversion images string-based (regex sur le HTML, pas de round-trip DOM) pour contourner les **Trusted Types** de LinkedIn qui strippent le HTML via `innerHTML`. Décode les entités HTML (`&amp;` → `&`) dans les URLs avant fetch. Pas de fallback server-side, certaines images CORS peuvent échouer.
+
+**Extension** : pas de fallback server-side, certaines images peuvent échouer.
 
 ### Authentification X
 - Login classique : email/username → password (géré)

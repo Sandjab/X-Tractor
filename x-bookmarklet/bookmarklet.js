@@ -1,4 +1,10 @@
 (async function() {
+  // Identifiant de build (remplacé par build.js : git short sha + date)
+  const BUILD_VERSION = '__BUILD_VERSION__';
+
+  // URL de Readability.js (remplacée dynamiquement par install.html)
+  const READABILITY_URL = '__READABILITY_URL__';
+
   const statusDiv = document.createElement('div');
   statusDiv.id = 'x-extractor-status';
   statusDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#1d9bf0;color:white;padding:15px 20px;border-radius:8px;z-index:999999;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
@@ -7,12 +13,6 @@
 
   const updateStatus = (msg) => { statusDiv.textContent = msg; };
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-  // URL de Readability.js (remplacée dynamiquement par install.html)
-  const READABILITY_URL = '__READABILITY_URL__';
-
-  // Identifiant de build (remplacé par build.js : git short sha + date)
-  const BUILD_VERSION = '__BUILD_VERSION__';
 
   // Charge Readability.js dynamiquement si pas encore présent
   function loadReadability() {
@@ -148,8 +148,8 @@
   }
 
   function extractLinkedIn() {
-    // 1) Tentative ciblée : sélecteurs Pulse publics
-    const specificSelectors = ['[data-test-id="article-content-blocks"]', 'article.article-main', 'article.pulse'];
+    // 1) Tentative ciblée : sélecteurs Pulse publics + DOM logué (reader)
+    const specificSelectors = ['[data-test-id="article-content-blocks"]', '.reader-content-blocks-container', 'article.article-main', 'article.pulse'];
     let articleEl = null;
     for (const sel of specificSelectors) {
       articleEl = document.querySelector(sel);
@@ -221,21 +221,36 @@
       '[data-tracking-control-name*="topic_pill"]',
       'button[aria-label*="Open menu" i]','button[aria-label*="Sign in" i]',
       '[role="tooltip"]','.collapsible-dropdown__list',
-      '[data-tracking-control-name="article-ssr-frontend-pulse_little-text-block"]'
+      '[data-tracking-control-name="article-ssr-frontend-pulse_little-text-block"]',
+      '.content-author-card','.inline-article'
     ];
     removeSelectors.forEach(sel => {
       try { clone.querySelectorAll(sel).forEach(el => el.remove()); } catch (e) {}
     });
 
+    // Supprimer le bloc "Recommandé par LinkedIn" (h2 + container de cards)
+    clone.querySelectorAll('h2').forEach(h2 => {
+      if (/recommand/i.test(h2.textContent)) {
+        const next = h2.nextElementSibling;
+        if (next) next.remove();
+        h2.remove();
+      }
+    });
+
     const titleEl = document.querySelector('meta[property="og:title"]');
     const ogImage = document.querySelector('meta[property="og:image"]');
     const authorLink = document.querySelector('a[data-tracking-control-name="article-ssr-frontend-pulse_publisher-author-card"]');
-    const articleTitle = titleEl ? titleEl.content : (document.querySelector('h1.pulse-title')?.textContent?.trim() || parseLinkedInDocTitle(document.title));
-    const byline = authorLink ? authorLink.textContent.trim().replace(/\s+/g, ' ') : '';
+    const readerTitle = document.querySelector('h1.reader-article-header__title');
+    const readerCover = document.querySelector('article > header figure img');
+    const readerAuthors = document.querySelectorAll('.reader-author-info__container a');
+    const readerAuthor = Array.from(readerAuthors).find(a => a.textContent.trim());
+    const articleTitle = (titleEl && titleEl.content) || readerTitle?.textContent?.trim() || document.querySelector('h1.pulse-title')?.textContent?.trim() || parseLinkedInDocTitle(document.title);
+    const byline = authorLink ? authorLink.textContent.trim().replace(/\s+/g, ' ') : (readerAuthor ? readerAuthor.textContent.trim().replace(/\s+/g, ' ') : '');
 
     let headerHtml = '';
-    if (ogImage && ogImage.content) {
-      headerHtml += '<figure class="x-tractor-featured"><img src="' + ogImage.content + '" alt=""></figure>';
+    const coverSrc = (ogImage && ogImage.content) || (readerCover && readerCover.src) || '';
+    if (coverSrc) {
+      headerHtml += '<figure class="x-tractor-featured"><img src="' + coverSrc + '" alt=""></figure>';
     }
     if (articleTitle && !clone.outerHTML.trimStart().match(/^<h1[\s>]/i)) {
       headerHtml += '<h1 class="x-tractor-title">' + articleTitle.replace(/</g, '&lt;') + '</h1>';
@@ -243,6 +258,42 @@
     if (byline) {
       headerHtml += '<div class="x-tractor-byline">' + byline.replace(/</g, '&lt;') + '</div>';
     }
+
+    // Convertir les spans Tailwind LinkedIn en sémantique HTML
+    clone.querySelectorAll('span.italic').forEach(s => {
+      const em = document.createElement('em');
+      while (s.firstChild) em.appendChild(s.firstChild);
+      s.replaceWith(em);
+    });
+    clone.querySelectorAll('span[class*="font-[700]"]').forEach(s => {
+      const strong = document.createElement('strong');
+      while (s.firstChild) strong.appendChild(s.firstChild);
+      s.replaceWith(strong);
+    });
+
+    // Déballer les <span class=""> vides (garder le contenu texte)
+    clone.querySelectorAll('span').forEach(s => {
+      if (!s.className || s.className === '' || s.getAttribute('class') === '') {
+        s.replaceWith(...s.childNodes);
+      }
+    });
+
+    // Supprimer les comment nodes
+    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    comments.forEach(c => c.remove());
+
+    // Nettoyer les attributs LinkedIn résiduels (inclut l'élément racine)
+    if (clone.hasAttribute('data-test-id')) clone.removeAttribute('data-test-id');
+    clone.querySelectorAll('[data-test-id]').forEach(el => el.removeAttribute('data-test-id'));
+    clone.querySelectorAll('[rel="ugc"]').forEach(el => el.removeAttribute('rel'));
+    clone.querySelectorAll('[class]').forEach(el => {
+      const cls = el.getAttribute('class');
+      if (cls && /(babybear|mamabear|papabear|text-color-|bg-color-)/.test(cls)) {
+        el.removeAttribute('class');
+      }
+    });
 
     return {
       html: headerHtml + clone.outerHTML,
@@ -385,16 +436,20 @@
       data = extractGeneric();
     }
 
-    // Convertir les images en base64
+    // Convertir les images en base64 (string-based pour bypass Trusted Types)
     updateStatus('Conversion des images...');
-    const container = document.createElement('div');
-    container.innerHTML = data.html;
-
-    const images = container.querySelectorAll('img');
+    let articleHtml = data.html;
+    const decodeEntities = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    const imgUrls = (articleHtml.match(/\bsrc="(https?:\/\/[^"]+)"/g) || [])
+      .map(s => s.replace(/^src="/, '').replace(/"$/, ''));
+    const bgUrls = (articleHtml.match(/url\(["']?(https?:\/\/[^"')]+)["']?\)/g) || [])
+      .map(s => s.replace(/^url\(["']?/, '').replace(/["']?\)$/, ''));
+    const uniqueUrls = [...new Set([...imgUrls, ...bgUrls])];
     let processed = 0;
-    for (const img of images) {
+    for (const url of uniqueUrls) {
       try {
-        const response = await fetch(img.src);
+        const fetchUrl = decodeEntities(url);
+        const response = await fetch(fetchUrl);
         const blob = await response.blob();
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -402,33 +457,11 @@
           reader.onerror = reject;
           reader.readAsDataURL(blob);
         });
-        img.src = base64;
+        articleHtml = articleHtml.split(url).join(base64);
         processed++;
-        updateStatus(`Conversion des images... ${processed}/${images.length}`);
+        updateStatus(`Conversion des images... ${processed}/${uniqueUrls.length}`);
       } catch (e) {
-        console.warn('Image non convertie:', img.src);
-      }
-    }
-
-    // Convertir les background-image
-    const elementsWithBg = container.querySelectorAll('*');
-    for (const el of elementsWithBg) {
-      const bg = el.style.backgroundImage;
-      if (bg && bg.startsWith('url(')) {
-        const urlMatch = bg.match(/url\(["']?([^"')]+)["']?\)/);
-        if (urlMatch && urlMatch[1].startsWith('http')) {
-          try {
-            const response = await fetch(urlMatch[1]);
-            const blob = await response.blob();
-            const base64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-            el.style.backgroundImage = `url("${base64}")`;
-          } catch (e) {}
-        }
+        console.warn('Image non convertie:', url);
       }
     }
 
@@ -467,7 +500,7 @@
 </head>
 <body>
   <div class="article-container">
-    ${container.innerHTML}
+    ${articleHtml}
   </div>
 </body>
 </html>`;

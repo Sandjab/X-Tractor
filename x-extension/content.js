@@ -127,8 +127,8 @@ function parseLinkedInDocTitle(t) {
 }
 
 function extractLinkedIn() {
-  // 1) Tentative ciblée : sélecteurs Pulse publics
-  const specificSelectors = ['[data-test-id="article-content-blocks"]', 'article.article-main', 'article.pulse'];
+  // 1) Tentative ciblée : sélecteurs Pulse publics + DOM logué (reader)
+  const specificSelectors = ['[data-test-id="article-content-blocks"]', '.reader-content-blocks-container', 'article.article-main', 'article.pulse'];
   let articleEl = null;
   for (const sel of specificSelectors) {
     articleEl = document.querySelector(sel);
@@ -370,6 +370,12 @@ function imageToBase64ViaCanvas(img) {
 // === Fonction d'extraction principale ===
 async function extractArticle() {
   const source = detectSource();
+
+  // LinkedIn : nettoyer les paramètres de tracking qui cassent le rendu
+  if (source === 'linkedin' && window.location.search) {
+    window.location.replace(window.location.origin + window.location.pathname);
+    return { error: 'redirect' };
+  }
 
   let data;
   if (source === 'x') {

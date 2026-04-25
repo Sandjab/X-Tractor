@@ -14,6 +14,7 @@ import os from 'os';
 import { detectSource, sourceLabel } from './extractors/detector.js';
 import * as xExtractor from './extractors/x-extractor.js';
 import * as mediumExtractor from './extractors/medium-extractor.js';
+import * as linkedinExtractor from './extractors/linkedin-extractor.js';
 import * as genericExtractor from './extractors/generic-extractor.js';
 import { generateHtml } from './output/html-generator.js';
 import { generateMarkdown } from './output/markdown-generator.js';
@@ -170,7 +171,8 @@ async function extractArticle(articleUrl, outputFilename, format = 'html') {
     }
 
     const page = await context.newPage();
-    await page.goto(articleUrl, { waitUntil: 'domcontentloaded' });
+    const navUrl = cleanLinkedInUrl(articleUrl);
+    await page.goto(navUrl, { waitUntil: 'domcontentloaded' });
 
     // Pour X, vérifier la redirection login
     if (source === 'x') {
@@ -240,8 +242,20 @@ function getExtractor(source) {
   switch (source) {
     case 'x': return xExtractor;
     case 'medium': return mediumExtractor;
+    case 'linkedin': return linkedinExtractor;
     default: return genericExtractor;
   }
+}
+
+function cleanLinkedInUrl(url) {
+  try {
+    const u = new URL(url);
+    if ((u.hostname === 'linkedin.com' || u.hostname.endsWith('.linkedin.com')) && u.pathname.includes('/pulse/') && u.search) {
+      u.search = '';
+      return u.toString();
+    }
+  } catch {}
+  return url;
 }
 
 async function embedImages(page, articleData) {

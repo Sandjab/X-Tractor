@@ -412,6 +412,14 @@
 
   try {
     const source = detectSource();
+
+    // LinkedIn : nettoyer les paramètres de tracking qui cassent le rendu de la page
+    if (source === 'linkedin' && window.location.search) {
+      updateStatus('Nettoyage URL LinkedIn...');
+      window.location.replace(window.location.origin + window.location.pathname);
+      return;
+    }
+
     updateStatus(`Extraction (${source === 'x' ? 'X' : source === 'medium' ? 'Medium' : source === 'linkedin' ? 'LinkedIn' : 'Web'})...`);
 
     // Charger Readability pour les pages génériques ET LinkedIn

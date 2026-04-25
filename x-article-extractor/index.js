@@ -83,8 +83,9 @@ async function main() {
       await loadOrLogin(context, page, articleUrl, headlessMode);
     } else {
       // Pour les autres sources, naviguer directement
+      const navUrl = cleanLinkedInUrl(articleUrl);
       console.log(`Navigation vers l'article...`);
-      await page.goto(articleUrl, { waitUntil: 'domcontentloaded' });
+      await page.goto(navUrl, { waitUntil: 'domcontentloaded' });
     }
 
     // Sélectionner l'extracteur approprié
@@ -147,6 +148,19 @@ function getExtractor(source) {
  */
 function slugify(str) {
   return (str || 'article').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// ===== Nettoyage URL LinkedIn =====
+
+function cleanLinkedInUrl(url) {
+  try {
+    const u = new URL(url);
+    if ((u.hostname === 'linkedin.com' || u.hostname.endsWith('.linkedin.com')) && u.pathname.includes('/pulse/') && u.search) {
+      u.search = '';
+      return u.toString();
+    }
+  } catch {}
+  return url;
 }
 
 // ===== Authentification X =====

@@ -2,7 +2,7 @@
   const statusDiv = document.createElement('div');
   statusDiv.id = 'x-extractor-status';
   statusDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#1d9bf0;color:white;padding:15px 20px;border-radius:8px;z-index:999999;font-family:system-ui;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-  statusDiv.textContent = 'Extraction en cours...';
+  statusDiv.textContent = 'X-Tractor ' + BUILD_VERSION;
   document.body.appendChild(statusDiv);
 
   const updateStatus = (msg) => { statusDiv.textContent = msg; };
@@ -10,6 +10,9 @@
 
   // URL de Readability.js (remplacée dynamiquement par install.html)
   const READABILITY_URL = '__READABILITY_URL__';
+
+  // Identifiant de build (remplacé par build.js : git short sha + date)
+  const BUILD_VERSION = '__BUILD_VERSION__';
 
   // Charge Readability.js dynamiquement si pas encore présent
   function loadReadability() {

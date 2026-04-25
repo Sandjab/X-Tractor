@@ -122,14 +122,56 @@ function extractMedium() {
 }
 
 // === Extraction LinkedIn ===
+function parseLinkedInDocTitle(t) {
+  return (t || '').replace(/^\s*\(\d+\)\s*/, '').replace(/\s*\|\s*LinkedIn\s*$/i, '').trim();
+}
+
 function extractLinkedIn() {
-  // Préférer le bloc de contenu pur (sans header/cover/share)
-  const selectors = ['[data-test-id="article-content-blocks"]', 'article.article-main', 'article.pulse', 'article'];
+  // 1) Tentative ciblée : sélecteurs Pulse publics
+  const specificSelectors = ['[data-test-id="article-content-blocks"]', 'article.article-main', 'article.pulse'];
   let articleEl = null;
-  for (const sel of selectors) {
+  for (const sel of specificSelectors) {
     articleEl = document.querySelector(sel);
     if (articleEl) break;
   }
+
+  // 2) Fallback Readability si DOM logué/auteur
+  if (!articleEl) {
+    const titleElMeta = document.querySelector('meta[property="og:title"]');
+    const ogImageMeta = document.querySelector('meta[property="og:image"]');
+    const articleTitle = (titleElMeta && titleElMeta.content) ? titleElMeta.content : parseLinkedInDocTitle(document.title);
+
+    if (typeof Readability !== 'undefined') {
+      try {
+        const docClone = document.cloneNode(true);
+        const reader = new Readability(docClone);
+        const article = reader.parse();
+        if (article && article.content) {
+          let headerHtml = '';
+          if (ogImageMeta && ogImageMeta.content) {
+            headerHtml += '<figure class="x-tractor-featured"><img src="' + ogImageMeta.content + '" alt=""></figure>';
+          }
+          if (articleTitle && !article.content.trimStart().match(/^<h1[\s>]/i)) {
+            headerHtml += '<h1 class="x-tractor-title">' + articleTitle.replace(/</g, '&lt;') + '</h1>';
+          }
+          if (article.byline) {
+            headerHtml += '<div class="x-tractor-byline">' + article.byline.replace(/</g, '&lt;') + '</div>';
+          }
+          return {
+            html: headerHtml + article.content,
+            styles: '',
+            title: articleTitle,
+            siteName: 'LinkedIn',
+            extraCss: '.x-tractor-featured{margin:0 0 1.5em 0;text-align:center}.x-tractor-featured img{max-width:100%;height:auto;border-radius:4px}.x-tractor-title{margin:0 0 0.3em 0;line-height:1.2}.x-tractor-byline{opacity:0.6;font-size:0.9em;margin-bottom:1.5em;padding-bottom:1em;border-bottom:1px solid rgba(128,128,128,0.3)}figure{margin:2em 0}figure img{display:block;margin:0 auto;max-width:100%;height:auto}figcaption{text-align:center;font-size:0.875em;opacity:0.7;margin-top:0.5em}pre{background:rgba(128,128,128,0.1);padding:1em;border-radius:4px;overflow-x:auto}blockquote{border-left:3px solid currentColor;margin-left:0;padding-left:1.5em;opacity:0.85}'
+          };
+        }
+      } catch (e) {
+        console.warn('LinkedIn: Readability a échoué, fallback article:', e.message);
+      }
+    }
+    articleEl = document.querySelector('article');
+  }
+
   if (!articleEl) throw new Error('Article LinkedIn non trouvé');
   const clone = articleEl.cloneNode(true);
 

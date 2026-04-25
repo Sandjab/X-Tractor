@@ -35,7 +35,9 @@ export async function extract(page) {
   const doc = dom.window.document;
 
   const ogTitle = doc.querySelector('meta[property="og:title"]');
-  const title = ogTitle ? ogTitle.content : doc.querySelector('h1.pulse-title')?.textContent?.trim() || doc.querySelector('title')?.textContent || 'LinkedIn Article';
+  // Parse "(N) Titre | LinkedIn" → "Titre" pour le mode logué/auteur
+  const parseDocTitle = (t) => (t || '').replace(/^\s*\(\d+\)\s*/, '').replace(/\s*\|\s*LinkedIn\s*$/i, '').trim();
+  const title = ogTitle ? ogTitle.content : (doc.querySelector('h1.pulse-title')?.textContent?.trim() || parseDocTitle(doc.querySelector('title')?.textContent) || 'LinkedIn Article');
 
   // Auteur : LinkedIn n'a pas de meta[name=author] sur Pulse, on lit la card
   const authorLink = doc.querySelector('a[data-tracking-control-name="article-ssr-frontend-pulse_publisher-author-card"]');
@@ -46,12 +48,13 @@ export async function extract(page) {
 
   // Extraction côté page (pour éviter de perdre les attributs/styles)
   const linkedinHtml = await page.evaluate(() => {
-    // Préférer le bloc de contenu pur (sans header/cover/share/comments)
+    // Préférer le bloc de contenu pur (sans header/cover/share/comments).
+    // Pas de fallback générique sur 'article' : si aucun sélecteur Pulse ne matche,
+    // on retourne null pour que Readability prenne le relais (DOM logué/auteur).
     const selectors = [
       '[data-test-id="article-content-blocks"]',
       'article.article-main',
       'article.pulse',
-      'article',
     ];
 
     let articleEl = null;

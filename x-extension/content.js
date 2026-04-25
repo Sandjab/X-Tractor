@@ -38,7 +38,8 @@ function extractX() {
 
 // === Extraction Medium ===
 function extractMedium() {
-  const selectors = ['article', '[data-testid="storyContent"]', '.meteredContent', '.postArticle-content'];
+  // storyContent en premier : c'est le corps seul, sans le chrome de Medium
+  const selectors = ['[data-testid="storyContent"]', 'article', '.meteredContent', '.postArticle-content'];
   let articleEl = null;
   for (const sel of selectors) {
     articleEl = document.querySelector(sel);
@@ -47,17 +48,75 @@ function extractMedium() {
   if (!articleEl) throw new Error('Article Medium non trouvé');
   const clone = articleEl.cloneNode(true);
 
-  ['nav','[data-testid="headerSocialActions"]','[data-testid="postSidebarActions"]','[data-testid="post-end-cta"]','[data-testid="belowPostTagsPrompt"]','[data-testid="recommendedPosts"]','[data-testid="responses"]','[data-testid="metered-paywall"]'].forEach(sel => {
-    clone.querySelectorAll(sel).forEach(el => el.remove());
+  const removeSelectors = [
+    // Marqueur Medium pour chrome non-lisible
+    '.speechify-ignore','aside',
+    // Titre dupliqué (réinjecté ci-dessous depuis og:title)
+    '[data-testid="storyTitle"]','.pw-post-title',
+    // Clap UI résiduel
+    '.pw-multi-vote-icon','.pw-multi-vote-count',
+    // Navigation et headers
+    'nav','header',
+    '[data-testid="headerSocialActions"]','[data-testid="footerSocialActions"]','[data-testid="postSidebarActions"]',
+    '[data-testid="headerClapButton"]','[data-testid="footerClapButton"]',
+    '[data-testid="headerBookmarkButton"]','[data-testid="footerBookmarkButton"]',
+    '[data-testid="headerFollowButton"]','[data-testid="audioPlayButton"]',
+    '[data-testid="responsesPanel-button"]','[data-testid="responses"]',
+    '[data-testid="authorByline"]','[data-testid="storyPublishDate"]','[data-testid="storyReadTime"]',
+    '[data-testid="storyPreviewMeteredBanner"]','[data-testid="metered-paywall"]',
+    '[aria-label*="Top highlight" i]',
+    'button[aria-label*="Listen" i]','button[aria-label*="Share" i]','button[aria-label*="More options" i]',
+    'button[aria-label*="Bookmark" i]','button[aria-label*="Follow" i]',
+    'button[aria-label*="clap" i]','button[aria-label*="responses" i]',
+    '[role="tooltip"]','[data-testid="popover"]',
+    '[data-testid="post-end-cta"]','[data-testid="belowPostTagsPrompt"]','[data-testid="recommendedPosts"]','[aria-label="recommendations"]',
+  ];
+  removeSelectors.forEach(sel => {
+    try { clone.querySelectorAll(sel).forEach(el => el.remove()); } catch (e) {}
+  });
+
+  // Section "Bonus Articles" / "More from" / "Recommended" : h2 + siblings
+  const bonusPattern = /^\s*(bonus\s*articles?|more\s+from|recommended|read\s+more|further\s+reading)\s*$/i;
+  clone.querySelectorAll('h1, h2, h3').forEach(h => {
+    if (bonusPattern.test(h.textContent.trim())) {
+      let next = h.nextElementSibling;
+      h.remove();
+      while (next) {
+        const cur = next;
+        next = next.nextElementSibling;
+        cur.remove();
+      }
+    }
+  });
+  // Cards de posts liés (lien interne Medium ?source=post_page)
+  clone.querySelectorAll('a[data-discover="true"][href*="source=post_page"]').forEach(a => {
+    const card = a.closest('div');
+    if (card && card !== clone) card.remove();
   });
 
   const titleEl = document.querySelector('meta[property="og:title"]');
+  const authorEl = document.querySelector('meta[name="author"]');
+  const ogImage = document.querySelector('meta[property="og:image"]');
+
+  // Reconstruire l'en-tête (image, titre, auteur) depuis les métadonnées
+  let headerHtml = '';
+  if (ogImage && ogImage.content) {
+    headerHtml += '<figure class="x-tractor-featured"><img src="' + ogImage.content + '" alt=""></figure>';
+  }
+  const articleTitle = titleEl ? titleEl.content : document.title;
+  if (articleTitle && !clone.outerHTML.trimStart().match(/^<h1[\s>]/i)) {
+    headerHtml += '<h1 class="x-tractor-title">' + articleTitle.replace(/</g, '&lt;') + '</h1>';
+  }
+  if (authorEl && authorEl.content) {
+    headerHtml += '<div class="x-tractor-byline">' + authorEl.content.replace(/</g, '&lt;') + '</div>';
+  }
+
   return {
-    html: clone.outerHTML,
+    html: headerHtml + clone.outerHTML,
     styles: '',
-    title: titleEl ? titleEl.content : document.title,
+    title: articleTitle,
     siteName: 'Medium',
-    extraCss: 'figure{margin:2em 0}figure img{display:block;margin:0 auto}figcaption{text-align:center;font-size:0.875em;opacity:0.7;margin-top:0.5em}pre{background:rgba(128,128,128,0.1);padding:1em;border-radius:4px;overflow-x:auto}blockquote{border-left:3px solid currentColor;margin-left:0;padding-left:1.5em;opacity:0.85}'
+    extraCss: '.x-tractor-featured{margin:0 0 1.5em 0;text-align:center}.x-tractor-featured img{max-width:100%;height:auto;border-radius:4px}.x-tractor-title{margin:0 0 0.3em 0;line-height:1.2}.x-tractor-byline{opacity:0.6;font-size:0.9em;margin-bottom:1.5em;padding-bottom:1em;border-bottom:1px solid rgba(128,128,128,0.3)}figure{margin:2em 0}figure img{display:block;margin:0 auto}figcaption{text-align:center;font-size:0.875em;opacity:0.7;margin-top:0.5em}pre{background:rgba(128,128,128,0.1);padding:1em;border-radius:4px;overflow-x:auto}blockquote{border-left:3px solid currentColor;margin-left:0;padding-left:1.5em;opacity:0.85}'
   };
 }
 

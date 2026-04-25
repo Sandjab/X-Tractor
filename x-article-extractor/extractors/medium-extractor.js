@@ -41,12 +41,16 @@ export async function extract(page) {
   const authorMeta = doc.querySelector('meta[name="author"]');
   const byline = authorMeta ? authorMeta.content : '';
 
+  const ogImage = doc.querySelector('meta[property="og:image"]');
+  const featuredImage = ogImage ? ogImage.content : '';
+
   // Essayer l'extraction spécifique Medium d'abord
   const mediumHtml = await page.evaluate(() => {
-    // Sélecteurs Medium connus (article principal)
+    // Préférer storyContent (corps seul, sans header chrome)
+    // Fallback sur article si non trouvé
     const selectors = [
-      'article',
       '[data-testid="storyContent"]',
+      'article',
       '.meteredContent',
       '.postArticle-content',
     ];
@@ -61,34 +65,93 @@ export async function extract(page) {
 
     const clone = articleEl.cloneNode(true);
 
-    // Supprimer les éléments parasites Medium
+    // .speechify-ignore est le marqueur natif Medium pour les éléments qui
+    // ne sont pas du contenu d'article (chrome : top highlight, byline,
+    // Follow, claps, comments, bookmark, listen, share, more, alt-text overlay)
+    // Liste data-testid + classes pw-* en defense in depth pour les variantes
     const removeSelectors = [
-      // Navigation et header
+      // Marqueur Medium pour le chrome non-lisible (couvre la plupart des cas)
+      '.speechify-ignore',
+      // Top highlight widget (aside flottant)
+      'aside',
+      // Titre dupliqué (on en réinjecte un depuis og:title)
+      '[data-testid="storyTitle"]',
+      '.pw-post-title',
+      // Clap UI (icône + count)
+      '.pw-multi-vote-icon',
+      '.pw-multi-vote-count',
+      // Navigation et headers
       'nav',
-      'header:not(article header)',
-      // Barres d'action
+      'header',
+      // Barres d'action (header, footer, sidebar)
       '[data-testid="headerSocialActions"]',
+      '[data-testid="footerSocialActions"]',
       '[data-testid="postSidebarActions"]',
+      // Boutons individuels
+      '[data-testid="headerClapButton"]',
+      '[data-testid="footerClapButton"]',
+      '[data-testid="headerBookmarkButton"]',
+      '[data-testid="footerBookmarkButton"]',
+      '[data-testid="headerFollowButton"]',
       '[data-testid="audioPlayButton"]',
+      '[data-testid="responsesPanel-button"]',
+      '[data-testid="responses"]',
+      // Author byline / metadata
+      '[data-testid="authorByline"]',
+      '[data-testid="storyPublishDate"]',
+      '[data-testid="storyReadTime"]',
+      // Member-only / paywall banners
+      '[data-testid="storyPreviewMeteredBanner"]',
+      '[data-testid="metered-paywall"]',
+      // aria-label fallbacks
+      '[aria-label*="Top highlight" i]',
+      'button[aria-label*="Listen" i]',
+      'button[aria-label*="Share" i]',
+      'button[aria-label*="More options" i]',
+      'button[aria-label*="Bookmark" i]',
+      'button[aria-label*="Follow" i]',
+      'button[aria-label*="clap" i]',
+      'button[aria-label*="responses" i]',
       // Popovers, tooltips
       '[role="tooltip"]',
       '[data-testid="popover"]',
-      // Suivre / S'abonner
-      'button[data-testid="headerFollowButton"]',
-      // Footer promotions
+      // End-of-article promotions
       '[data-testid="post-end-cta"]',
       '[data-testid="belowPostTagsPrompt"]',
-      // Recommendations
       '[data-testid="recommendedPosts"]',
       '[aria-label="recommendations"]',
-      // Commentaires
-      '[data-testid="responses"]',
-      // Member-only banners
-      '[data-testid="metered-paywall"]',
     ];
 
     removeSelectors.forEach(sel => {
-      clone.querySelectorAll(sel).forEach(el => el.remove());
+      try {
+        clone.querySelectorAll(sel).forEach(el => el.remove());
+      } catch (e) {
+        // certains anciens navigateurs ne supportent pas le flag `i`
+      }
+    });
+
+    // Section "Bonus Articles" / "More from" / "Recommended" :
+    // h2 + tous les siblings suivants (cards de posts liés).
+    // On détecte le h2 par le texte (fragile mais c'est le seul signal stable).
+    const bonusPattern = /^\s*(bonus\s*articles?|more\s+from|recommended|read\s+more|further\s+reading)\s*$/i;
+    const allHeadings = clone.querySelectorAll('h1, h2, h3');
+    allHeadings.forEach(h => {
+      if (bonusPattern.test(h.textContent.trim())) {
+        let next = h.nextElementSibling;
+        h.remove();
+        while (next) {
+          const cur = next;
+          next = next.nextElementSibling;
+          cur.remove();
+        }
+      }
+    });
+
+    // Lien interne Medium "post_page" : signature des cards de posts liés
+    // Si un tel lien subsiste isolé, on retire son card-wrapper le plus proche
+    clone.querySelectorAll('a[data-discover="true"][href*="source=post_page"]').forEach(a => {
+      const card = a.closest('div');
+      if (card && card !== clone) card.remove();
     });
 
     return clone.outerHTML;
@@ -123,6 +186,7 @@ export async function extract(page) {
     styles: '',
     title,
     byline,
+    featuredImage,
     siteName: 'Medium',
     bodyStyles,
   };
